@@ -3,18 +3,20 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from scipy import signal, stats
+np.seterr(divide='ignore')
 
 
 class WindowPeaks:
 
     def __init__(self, raw_signal: np.array, windows: dict, min_peak_distance: int,
-                 threshold_factor: float, min_height, is_reversed):
+                 threshold_factor: float, min_height, is_reversed, prefix=""):
         self.raw_signal = raw_signal
         self.windows = windows
         self.min_peak_distance = min_peak_distance
         self.threshold_factor = threshold_factor
         self.min_height = min_height
         self.is_reversed = is_reversed
+        self.prefix = prefix
         self.peaks_arr = self.call_signal_peaks()
 
     def call_signal_peaks(self) -> np.array:
@@ -38,8 +40,29 @@ class WindowPeaks:
         else:
             all_peaks[:, 0] += 1
         raw_heights = [self.raw_signal[x] for x in all_peaks[:, 0].astype(int)]
-        all_peaks = np.stack((all_peaks[:, 0], all_peaks[:, 1], np.array(raw_heights)), axis=-1)
+        mean_step_before = np.array([np.mean(self.raw_signal[x - 4: x - 1]) for x in all_peaks[:, 0].astype(int)])
+        mean_step_after = np.array([np.mean(self.raw_signal[x + 1: x + 4]) for x in all_peaks[:, 0].astype(int)])
+        step_factor = mean_step_after / mean_step_before if self.is_reversed else mean_step_before / mean_step_after
+        fold_change = np.log2(mean_step_before / mean_step_after)\
+            if self.is_reversed else \
+            np.log2(mean_step_after / mean_step_before)
+
+        mean_plateau_height =\
+            [np.round(np.mean(self.raw_signal[x - 29: x]), 2)
+             if self.is_reversed else
+             np.round(np.mean(self.raw_signal[x: x + 29]), 2)
+             for x in all_peaks[:, 0].astype(int)]
+
+        all_peaks = np.stack((all_peaks[:, 0],
+                              np.round(all_peaks[:, 1], 2),
+                              np.array(np.round(raw_heights, 2)),
+                              np.round(mean_step_before, 2),
+                              np.round(mean_step_after, 2),
+                              np.round(step_factor, 2),
+                              np.round(fold_change, 2),
+                              np.array(mean_plateau_height)), axis=-1)
         all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]
+        #print(all_peaks)
         return all_peaks
 
     @staticmethod
@@ -65,7 +88,10 @@ class WindowPeaks:
 
     def get_peaks_df(self):
         peaks_df = pd.DataFrame(data=self.peaks_arr,
-                                columns=["peak_index", "diff_height", "height"],
+                                columns=["peak_index", f"{self.prefix}_diff_height",
+                                         f"{self.prefix}_height", f"{self.prefix}_step_before",
+                                         f"{self.prefix}_step_after", f"{self.prefix}_step_factor",
+                                         f"{self.prefix}_background_fold_change", f"{self.prefix}_mean_plateau_height"],
                                 index=list(range(self.peaks_arr.shape[0])))
         peaks_df["peak_index"] = peaks_df["peak_index"].astype(int)
         return peaks_df
@@ -76,6 +102,14 @@ class WindowPeaks:
         gff_df["seqid"] = seqid
         gff_df["start"] = gff_df["peak_index"] + 1
         gff_df["end"] = gff_df["peak_index"] + 1
+        gff_df.drop(["peak_index"], inplace=True, axis=1)
+        columns.remove("peak_index")
+        gff_df["attributes"] = ""
+
+        for indx in gff_df.index:
+            gff_df.at[indx, "attributes"] = f"{self.prefix}_id={self.prefix}{indx}"
+        for column in columns:
+            gff_df["attributes"] += ";" + column + "=" + gff_df[column].astype(str)
         gff_df.drop(columns, inplace=True, axis=1)
         return gff_df.to_csv(index=False, sep="\t", header=False)
 

@@ -25,15 +25,15 @@ class WindowSRNA:
             exit(1)
         self.gff_df[self.gff_df["strand"] == self.strand].copy()
         self.gff_col_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
-        self.srna_candidates = pd.DataFrame(columns=["seqid", "start", "end", "length"])
+        self.srna_candidates = pd.DataFrame(columns=["seqid", "start", "end", "attributes"])
 
     def call_window_srna(self, min_len: int, max_len: int, min_distance: int, threshold_factor=1.5, min_height=0.0):
         five_end_is_reversed = True if self.strand == "-" else False
         three_end_is_reversed = True if self.strand == "+" else False
         gff_temp = self.gff_df.copy()
         gff_temp["group_index"] = pd.Series(list(range(gff_temp.shape[0])))
-        widows_df = gff_temp.loc[:, ["group_index", "start", "end", "attributes"]]
-        windows = list(zip((widows_df["start"] - 1).tolist(), (widows_df["end"] - 1).tolist()))
+        windows_df = gff_temp.loc[:, ["group_index", "start", "end", "attributes"]]
+        windows = list(zip((windows_df["start"] - 1).tolist(), (windows_df["end"] - 1).tolist()))
         windows = dict(zip(gff_temp["group_index"].tolist(), windows))
         for seqid in self.seqids:
             print(f"Processing wiggles of {seqid}")
@@ -42,30 +42,31 @@ class WindowSRNA:
                                              min_distance,
                                              threshold_factor,
                                              min_height,
-                                             five_end_is_reversed)
+                                             five_end_is_reversed, "SS")
             three_end_peaks_obj = WindowPeaks(self.three_end_wiggle[seqid],
                                               windows,
                                               min_distance,
                                               threshold_factor,
                                               min_height,
-                                              three_end_is_reversed)
+                                              three_end_is_reversed, "TS")
             five_end_peaks_bed = pybed.BedTool(five_end_peaks_obj.get_bed_str(seqid), from_string=True).sort()
             three_end_peaks_bed = pybed.BedTool(three_end_peaks_obj.get_bed_str(seqid), from_string=True).sort()
             if self.strand == "+":
                 connected_peaks = five_end_peaks_bed.closest(three_end_peaks_bed, d=True, D="ref", io=True, iu=True)
             else:
                 connected_peaks = three_end_peaks_bed.closest(five_end_peaks_bed, d=True, D="ref", io=True, iu=True)
-            connected_peaks_df = pd.read_csv(StringIO(str(connected_peaks)),
-                                             names=["seqid", "start", "drop1", "drop2", "end", "drop3", "drop4"],
-                                             sep="\t")
-            connected_peaks_df["length"] = connected_peaks_df["end"] - connected_peaks_df["start"] + 1
-            connected_peaks_df = connected_peaks_df[connected_peaks_df["drop4"].isin(range(min_len, max_len - 1, 1))]
-            print(connected_peaks_df.to_string())
-            drop_columns = [x for x in connected_peaks_df.columns.tolist() if "drop" in x]
-            connected_peaks_df.drop(drop_columns, axis=1, inplace=True)
-            connected_peaks_df["length"] = connected_peaks_df["end"] - connected_peaks_df["start"] + 1
-            #connected_peaks_df = connected_peaks_df[connected_peaks_df["length"].between(min_len, max_len)]
-            connected_peaks_df.drop_duplicates(inplace=True)
+
+            connected_peaks_df = pd.read_csv(StringIO(str(connected_peaks)), sep="\t", names=list(range(9)))
+            connected_peaks_df = connected_peaks_df.iloc[:, [0, 1, 3, 5, 7, 8]].copy()
+            connected_peaks_df.rename(columns={0: "seqid", 1: "start", 3: "attr1", 5: "end", 7: "attr2", 8: "length"},
+                                      inplace=True)
+            connected_peaks_df["length"] += 2
+            connected_peaks_df =\
+                connected_peaks_df[connected_peaks_df["length"].isin(range(min_len, max_len + 1, 1))].copy()
+            connected_peaks_df["attributes"] = connected_peaks_df["attr1"] + ";" +\
+                                               connected_peaks_df["attr2"] + ";length=" + \
+                                               connected_peaks_df["length"].astype(str)
+            connected_peaks_df.drop(["attr1", "attr2", "length"], inplace=True, axis=1)
             self.srna_candidates = self.srna_candidates.append(connected_peaks_df, ignore_index=True)
 
     def export_to_gff(self, out_path: str, anno_source="_", anno_type="_"):
