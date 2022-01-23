@@ -20,7 +20,9 @@ def main():
                         help="")
     parser.add_argument("--threshold_factor", default=1.5, type=float,
                         help="")
-    parser.add_argument("--min_raw_height", default=0, type=float,
+    parser.add_argument("--min_raw_height", default=10, type=float,
+                        help="")
+    parser.add_argument("--min_bg_fold_change", default=1, type=float,
                         help="")
     parser.add_argument("--gff_out_dir", required=True, type=str,
                         help="")
@@ -57,11 +59,13 @@ def main():
                       f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.gff", "WinRNA", "ORF_int")
         export_to_gff(tmp_df2,
                       f"{os.path.dirname(args.gff_out_dir)}/TEX_neg_{desc}.gff", "WinRNA", "ORF_int")
+        export_to_table(tmp_df1, f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.tsv")
+        export_to_table(tmp_df2, f"{os.path.dirname(args.gff_out_dir)}/TEX_neg_{desc}.tsv")
     exit(0)
 
 
 def _call_srnas(five_end_path, three_end_path, stranded_filtered_gff, args):
-    srnas = WindowSRNA(stranded_filtered_gff, Wiggle(five_end_path), Wiggle(three_end_path))
+    srnas = WindowSRNA(Wiggle(five_end_path), Wiggle(three_end_path))
     srnas.call_window_srna(
         args.min_len, args.max_len, args.read_length, args.threshold_factor, args.min_raw_height)
     return srnas.srna_candidates
@@ -86,8 +90,24 @@ def export_to_gff(gff_df: pd.DataFrame, out_path: str, anno_source="_", anno_typ
     gff_df.to_csv(os.path.abspath(out_path), index=False, sep="\t", header=False)
     print("GFF exported")
 
-def export_to_table():
-    pass
+
+def export_to_table(df, export_path):
+    df = expand_attributes_to_columns(df)
+    df.sort_values(["seqid", "start", "end"], inplace=True)
+    df.reset_index(inplace=True, drop=True)
+    df.to_csv(os.path.abspath(export_path), index=True, sep="\t", header=True)
+
+
+def expand_attributes_to_columns(df):
+    for i in df.index:
+        attributes = df.at[i, "attributes"].split(";")
+        for attr in attributes:
+            k, v = attr.split("=")
+            df.at[i, k] = v
+    df.drop(["attributes"], inplace=True, axis=1)
+    return df
+
+
 
 if __name__ == '__main__':
 

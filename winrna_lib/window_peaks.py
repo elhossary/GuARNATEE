@@ -3,15 +3,16 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from scipy import signal, stats
+from more_itertools import consecutive_groups
 np.seterr(divide='ignore')
 
 
 class WindowPeaks:
 
-    def __init__(self, raw_signal: np.array, windows: dict, min_peak_distance: int,
+    def __init__(self, raw_signal: np.array, min_peak_distance: int,
                  threshold_factor: float, min_height, is_reversed, prefix=""):
         self.raw_signal = raw_signal
-        self.windows = windows
+        self.windows = self.get_slicing_indexes(self.raw_signal)
         self.min_peak_distance = min_peak_distance
         self.threshold_factor = threshold_factor
         self.min_height = min_height
@@ -23,12 +24,11 @@ class WindowPeaks:
         sig_deriv = np.flipud(np.diff(np.flipud(self.raw_signal))) if self.is_reversed \
             else np.diff(self.raw_signal)
         all_peaks = []
-        for group in tqdm(self.windows.keys(), desc="Progress: "):
-            window = self.windows[group]
+
+        for window in tqdm(self.windows, desc="==> Calling peaks: ", postfix=""):
             window_sig_slice = sig_deriv[window[0]: window[1]]
-            window_peaks = self._call_peaks_in_slice(window_sig_slice,
-                                                     self.min_peak_distance,
-                                                     self.threshold_factor)
+            window_peaks = self._call_peaks_in_slice(window_sig_slice, self.threshold_factor, self.min_peak_distance)
+
             if window_peaks is None:
                 continue
             window_peaks[:, 0] += window[0]
@@ -62,29 +62,28 @@ class WindowPeaks:
                               np.round(fold_change, 2),
                               np.array(mean_plateau_height)), axis=-1)
         all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]
-        #print(all_peaks)
         return all_peaks
 
     @staticmethod
-    def _call_peaks_in_slice(signal_slice, min_peak_distance, threshold_factor):
-        peaks, peaks_props = signal.find_peaks(signal_slice,
-                                               width=(None, None),
-                                               distance=min_peak_distance,
-                                               height=(None, None),
-                                               threshold=(None, None),
-                                               prominence=(None, None),
-                                               rel_height=0.5,
-                                               plateau_size=(1, None))
+    def get_slicing_indexes(full_signal: np.array, slice_by=0.0, min_len=30):
+        full_signal = np.stack((np.array(list(range(0, full_signal.shape[0]))), full_signal), axis=-1)
+        sliced_signal = full_signal[full_signal[:, 1] != slice_by]
+        slice_indexes = [list(group) for group in consecutive_groups(sliced_signal[:, 0])]
+        return [(int(min(group)), int(max(group))) for group in slice_indexes if len(group) >= min_len]
+
+    @staticmethod
+    def _call_peaks_in_slice(signal_slice, threshold_factor, min_peak_distance=1):
+        # Core calling method
+        threshold_func = lambda data, factor: np.percentile(data, 75) + stats.iqr(data) * factor
+        # Call peaks
+        peaks, peaks_props = signal.find_peaks(signal_slice, height=(None, None), distance=30)
         if peaks.size == 0:
             return None
-
         # Generate threshold
-        q3 = np.percentile(peaks_props["peak_heights"], 75)
-        iqr = stats.iqr(peaks_props["peak_heights"])
-        threshold = q3 + (iqr * threshold_factor)
-        # Filter by threshold
-        peaks_arr = np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
-        return peaks_arr[peaks_arr[:, 1] >= threshold]
+        threshold = threshold_func(peaks_props["peak_heights"], threshold_factor)
+        # Filter by recalling peaks with threshold
+        peaks, peaks_props = signal.find_peaks(signal_slice, height=(threshold, None), distance=min_peak_distance)
+        return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):
         peaks_df = pd.DataFrame(data=self.peaks_arr,
