@@ -48,7 +48,7 @@ class RNAClassifier:
             orf_int_df = self.map_annotations(cds_genes_ref_df, orf_int_df, "orf_int")
             self.classes = pd.concat([self.classes, orf_int_df], ignore_index=True)
         self.classes = self.classes[self.classes["type"] != "candidate"]
-        print(self.classes.to_string())
+
 
     @staticmethod
     def subtract_dfs(full_df: pd.DataFrame, partial_df: pd.DataFrame):
