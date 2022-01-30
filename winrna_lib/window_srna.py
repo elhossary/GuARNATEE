@@ -48,18 +48,18 @@ class WindowSRNA:
                 self.connect_sites(five_end_peaks_bed, three_end_peaks_bed, min_len, max_len) \
                     if self.strand == "+" else \
                     self.connect_sites(three_end_peaks_bed, five_end_peaks_bed, min_len, max_len)
-            self.srna_candidates = self.srna_candidates.append(connected_peaks_df, ignore_index=True)
+            self.srna_candidates = pd.concat([self.srna_candidates, connected_peaks_df], ignore_index=True)
 
     @staticmethod
-    def connect_sites(start_bed: str, end_bed: str, min_len: int, max_len: int) -> pd.DataFrame:
+    def connect_sites(start_bed: pybed, end_bed: pybed, min_len: int, max_len: int) -> pd.DataFrame:
         base_columns = ["seqid", "start", "end", "attributes"]
         min_len -= 1
         max_len -= 1
         ret_df = pd.DataFrame(columns=base_columns)
-        start_df = pd.read_csv(StringIO(str(start_bed)), sep="\t", names=base_columns)
-        end_df = pd.read_csv(StringIO(str(end_bed)), sep="\t", names=base_columns)
+        start_df = start_bed.to_dataframe(names=base_columns)
+        end_df = end_bed.to_dataframe(names=base_columns)
         for row_id in tqdm(start_df.index, desc="==> Connecting 5' - 3' ends"):
-            size_range = range(start_df.at[row_id, "start"] + min_len, start_df.at[row_id, "start"] + max_len, 1)
+            size_range = set(range(start_df.at[row_id, "start"] + min_len, start_df.at[row_id, "start"] + max_len, 1))
             tmp_df = end_df[(end_df["seqid"] == start_df.at[row_id, "seqid"]) &
                             (end_df["end"].isin(size_range))].copy()
             if tmp_df.empty:
@@ -69,7 +69,7 @@ class WindowSRNA:
             tmp_df["attributes"] = f'{start_df.at[row_id, "attributes"]};' + \
                                    tmp_df["attributes"] + ";length=" + tmp_df["length"].astype(str)
             tmp_df.drop(["length"], inplace=True, axis=1)
-            ret_df = ret_df.append(tmp_df, ignore_index=True)
+            ret_df = pd.concat([ret_df, tmp_df], ignore_index=True)
         ret_df.sort_values(["seqid", "start", "end"], inplace=True)
         ret_df.reset_index(inplace=True, drop=True)
         return ret_df

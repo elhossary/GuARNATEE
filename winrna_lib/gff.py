@@ -9,6 +9,7 @@ class GFF:
         self.gff_paths = gff_paths
         self.column_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
         self.gff_df = pd.DataFrame(columns=self.column_names)
+        self.regions = pd.DataFrame()
         self.parse()
 
     def parse(self):
@@ -18,10 +19,12 @@ class GFF:
             for sub_item in glob.glob(item):
                 parsed_paths.append(os.path.abspath(sub_item))
         for gff_path in parsed_paths:
-            self.gff_df = self.gff_df.append(
-                pd.read_csv(gff_path, names=self.column_names, comment="#", sep="\t"),
+            self.gff_df = pd.concat(
+                [self.gff_df, pd.read_csv(gff_path, names=self.column_names, comment="#", sep="\t")],
                 ignore_index=True)
         self.gff_df.reset_index(drop=True, inplace=True)
+        self.regions = pd.concat([self.regions, self.gff_df[self.gff_df["type"] == "region"]])
+        self.gff_df.drop(self.regions.index, inplace=True, axis=0)
 
     def filter(self, anno_type=None, min_len=0, max_len=0, inplace=False) -> pd.DataFrame:
         gff_df = self.gff_df.copy()
