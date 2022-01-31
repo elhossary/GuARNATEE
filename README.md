@@ -1,2 +1,2 @@
 # WinRNA
-A tool for predicting RNAs globally based on differential RNA-Seq and Term-Seq
+A tool for predicting bacterial small RNAs globally based on differential RNA-Seq and Term-Seq
