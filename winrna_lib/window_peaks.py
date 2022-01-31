@@ -42,24 +42,24 @@ class WindowPeaks:
         raw_heights = [self.raw_signal[x] for x in all_peaks[:, 0].astype(int)]
         mean_step_before = np.array([np.mean(self.raw_signal[x - 4: x - 1]) for x in all_peaks[:, 0].astype(int)])
         mean_step_after = np.array([np.mean(self.raw_signal[x + 1: x + 4]) for x in all_peaks[:, 0].astype(int)])
-        step_factor = mean_step_after / mean_step_before if self.is_reversed else mean_step_before / mean_step_after
-        fold_change = np.log2(mean_step_before / mean_step_after)\
-            if self.is_reversed else \
-            np.log2(mean_step_after / mean_step_before)
+        step_factor = mean_step_before / mean_step_after if self.is_reversed else mean_step_after / mean_step_before
+        #fold_change = np.abs(np.log2(mean_step_after / mean_step_before))\
+        #    if self.is_reversed else \
+        #    np.abs(np.log2(mean_step_before / mean_step_after))
 
+        """plateau_height calculated as the average coverage for 30nt of peak height"""
         mean_plateau_height =\
             [np.round(np.mean(self.raw_signal[x - 29: x]), 2)
              if self.is_reversed else
              np.round(np.mean(self.raw_signal[x: x + 29]), 2)
              for x in all_peaks[:, 0].astype(int)]
-
+        #                               np.round(fold_change, 2),
         all_peaks = np.stack((all_peaks[:, 0],
                               np.round(all_peaks[:, 1], 2),
                               np.array(np.round(raw_heights, 2)),
                               np.round(mean_step_before, 2),
                               np.round(mean_step_after, 2),
                               np.round(step_factor, 2),
-                              np.round(fold_change, 2),
                               np.array(mean_plateau_height)), axis=-1)
         all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]
         return all_peaks
@@ -74,7 +74,7 @@ class WindowPeaks:
     @staticmethod
     def _call_peaks_in_slice(signal_slice, threshold_factor, min_peak_distance=1):
         # Core calling method
-        threshold_func = lambda data, factor: np.percentile(data, 75) + stats.iqr(data) * factor
+        threshold_func = lambda data, factor: (np.percentile(data, 75) + stats.iqr(data)) * (1.5 * factor)
         # Call peaks
         peaks, peaks_props = signal.find_peaks(signal_slice, height=(None, None), distance=30)
         if peaks.size == 0:
@@ -86,11 +86,15 @@ class WindowPeaks:
         return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):
+        # f"{self.prefix}_background_fold_change"
         peaks_df = pd.DataFrame(data=self.peaks_arr,
-                                columns=["peak_index", f"{self.prefix}_diff_height",
-                                         f"{self.prefix}_height", f"{self.prefix}_step_before",
-                                         f"{self.prefix}_step_after", f"{self.prefix}_step_factor",
-                                         f"{self.prefix}_background_fold_change", f"{self.prefix}_mean_plateau_height"],
+                                columns=["peak_index",
+                                         f"{self.prefix}_diff_height",
+                                         f"{self.prefix}_height",
+                                         f"{self.prefix}_upstream",
+                                         f"{self.prefix}_downstream",
+                                         f"{self.prefix}_step_factor",
+                                         f"{self.prefix}_mean_plateau_height"],
                                 index=list(range(self.peaks_arr.shape[0])))
         peaks_df["peak_index"] = peaks_df["peak_index"].astype(int)
         return peaks_df

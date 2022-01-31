@@ -27,12 +27,11 @@ class WindowSRNA:
     def call_window_srna(self, min_len: int, max_len: int, min_distance: int,
                          threshold_factor: float, min_height: float):
         for seqid in self.seqids:
-            if seqid != "NC_002516.2":
-                continue
-            print(f"Processing wiggles of {seqid}")
+            print(f"=> Calling 5' ends for SeqID: {seqid}")
             five_end_peaks_obj = WindowPeaks(self.five_end_wiggle[seqid],
                                              min_distance, threshold_factor, min_height,
                                              True if self.strand == "-" else False, "SS")
+            print(f"=> Calling 3' ends for SeqID: {seqid}")
             three_end_peaks_obj = WindowPeaks(self.three_end_wiggle[seqid],
                                               min_distance, threshold_factor, min_height,
                                               True if self.strand == "+" else False, "TS")

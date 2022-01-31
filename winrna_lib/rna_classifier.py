@@ -1,7 +1,8 @@
 import pandas as pd
 import pybedtools as pybed
+from itertools import product
 from io import StringIO
-
+from tqdm import tqdm
 
 class RNAClassifier:
 
@@ -9,21 +10,67 @@ class RNAClassifier:
         self.gff_df = gff_df[gff_df["type"] != "region"]
         self.anno_tbl_df = anno_tbl_df
         self.gff_columns = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
-        self.classes = pd.DataFrame()
+        self.classes = pd.DataFrame(columns=self.gff_columns)
         self.classify()
 
     def classify(self):
         self._classify()
+        self._drop_redundancies()
+        self.classes["source"] = "WinRNA"
+        self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        #print(self.classes.to_string())
 
-    def _classify(self):
-        #full_ref_df = self.gff_df[~self.gff_df["type"].isin(["CDS", "exon", "protein_binding_site"])].copy()
-        full_ref_df = self.gff_df  #[self.gff_df["type"] == "gene"].copy()
+    def _drop_redundancies(self):
+        df = self.expand_attributes_to_columns(self.classes)
+        combs = list(product(df["seqid"].unique().tolist(), ["+", "-"], ["start", "end"]))
+        drop_ids = []
+        for seqid, strand, select_column in tqdm(combs, desc="===> Cleaning redundancies"):
+            df_slice = df[(df["seqid"] == seqid) & (df["strand"] == strand)]
+            select_keys = df_slice[select_column].unique().tolist()
+            for select_key in select_keys:
+                tmp_df = df_slice[df_slice[select_column] == select_key].copy()
+                if tmp_df.shape[0] == 1:
+                    continue
+                if tmp_df["type"].unique().size > 0:
+                    # Split
+                    print(tmp_df.to_string())
+                tmp_df.sort_values(by=["SS_step_factor", "TS_step_factor", "length", "SS_height", "TS_height"],
+                                   ascending=[False, False, True, False, False],
+                                   inplace=True)
+                drop_ids.extend(tmp_df.index.tolist()[1:])
+
+        self.classes.drop(drop_ids, axis=0, inplace=True)
+
+    @staticmethod
+    def expand_attributes_to_columns(df) -> pd.DataFrame:
+        df.sort_values(["seqid", "start", "end"], inplace=True)
+        df.reset_index(inplace=True, drop=True)
+        for i in df.index:
+            attributes = df.at[i, "attributes"].split(";")
+            for attr in attributes:
+                k, v = attr.split("=")
+                df.at[i, k] = v
+        df.drop(["attributes"], inplace=True, axis=1)
+        return df
+
+    def _classify(self) -> None:
+        # full_ref_df = self.gff_df[~self.gff_df["type"].isin(["CDS", "exon", "protein_binding_site"])].copy()
+        # [self.gff_df["type"] == "gene"].copy()
+        full_ref_df = self.gff_df
+        anno_tbl_bed = pybed.BedTool.from_dataframe(self.anno_tbl_df)
+        # drop unwanted overlaps like tRNA or rRNA
+        drop_ref_df = full_ref_df[(full_ref_df["type"] == "tRNA") |
+                                  (full_ref_df["attributes"].str.contains("gene_biotype=tRNA;")) |
+                                  (full_ref_df["type"] == "rRNA") |
+                                  (full_ref_df["attributes"].str.contains("gene_biotype=rRNA;"))].copy()
+        drop_ref_bed = pybed.BedTool.from_dataframe(drop_ref_df)
+        anno_tbl_bed = anno_tbl_bed.intersect(drop_ref_bed, v=True, f=0.10, s=True)
+        #
         ncrna_ref_df = full_ref_df[full_ref_df["type"] == "ncRNA"].copy()
         cds_genes_ref_df = full_ref_df[(full_ref_df["type"] == "gene") &
                                        (full_ref_df["attributes"].str.contains("gene_biotype=protein_coding;"))].copy()
 
         # get novel intergenic (non-overlaps of any other annotations)
-        anno_tbl_bed = pybed.BedTool.from_dataframe(self.anno_tbl_df)
         full_ref_bed = pybed.BedTool.from_dataframe(full_ref_df)
         intergenic_df = \
             anno_tbl_bed.intersect(full_ref_bed, v=True, f=0.99, s=True).to_dataframe(names=self.gff_columns)
@@ -43,11 +90,10 @@ class RNAClassifier:
         # get unknown ORF_int
         if cds_genes_ref_df.shape[0] > 0:
             cds_genes_ref_bed = pybed.BedTool.from_dataframe(cds_genes_ref_df.loc[:, self.gff_columns[:-1]])
-            orf_int_bed = anno_tbl_bed.intersect(cds_genes_ref_bed, wa=True, f=0.99, u=True, s=True)
+            orf_int_bed = anno_tbl_bed.intersect(cds_genes_ref_bed, wa=True, f=0.50, u=True, s=True)
             orf_int_df = self.pybed_to_df_func(orf_int_bed, self.gff_columns)
             orf_int_df = self.map_annotations(cds_genes_ref_df, orf_int_df, "orf_int")
             self.classes = pd.concat([self.classes, orf_int_df], ignore_index=True)
-        self.classes = self.classes[self.classes["type"] != "candidate"]
 
 
     @staticmethod
@@ -77,6 +123,7 @@ class RNAClassifier:
         return query_df
 
     def mark_known_orf_int(self, df: pd.DataFrame):
+        df.reset_index(inplace=True, drop=True)
         drop_ids = []
         for i in df.index:
             check_range = range(df.at[i, "start_ref"], df.at[i, "end_ref"] + 1, 1)
@@ -90,7 +137,7 @@ class RNAClassifier:
                     f";annotation_type=ORF_internal_sRNA;host_gene_name={gene};sRNA_locus_tag={locus_tag}"
             else:
                 drop_ids.append(i)
-            #df.drop(index=drop_ids, inplace=True)
+        df.drop(index=drop_ids, inplace=True)
         return df
 
     def mark_known_intergenic(self, df: pd.DataFrame):

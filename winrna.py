@@ -19,7 +19,7 @@ def main():
                         help="Maximum allowed annotation length")
     parser.add_argument("--read_length", default=75, type=int,
                         help="")
-    parser.add_argument("--threshold_factor", default=1.5, type=float,
+    parser.add_argument("--threshold_factor", default=1, type=float,
                         help="")
     parser.add_argument("--min_raw_height", default=10, type=float,
                         help="")
@@ -108,12 +108,13 @@ def to_table_df(df):
 
 
 def expand_attributes_to_columns(df):
-    for i in df.index:
-        attributes = df.at[i, "attributes"].split(";")
-        for attr in attributes:
-            k, v = attr.split("=")
-            df.at[i, k] = v
-    df.drop(["attributes"], inplace=True, axis=1)
+    if "attributes" in df.columns:
+        for i in df.index:
+            attributes = df.at[i, "attributes"].split(";")
+            for attr in attributes:
+                k, v = attr.split("=")
+                df.at[i, k] = v
+        df.drop(["attributes"], inplace=True, axis=1)
     return df
 
 
