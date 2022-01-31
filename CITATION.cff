@@ -7,7 +7,7 @@ authors:
   - family-names: Förstner
     given-names: Konrad Ulrich
     orcid: https://orcid.org/0000-0002-1481-2996
-title: "WinnRNA - A tool for predicting RNAs globally based on differential RNA-Seq and Term-Seq"
+title: "A tool for predicting bacterial small RNAs globally based on differential RNA-Seq and Term-Seq"
 version: 0.0.0
 doi: -
 date-released: -
