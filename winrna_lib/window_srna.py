@@ -1,7 +1,7 @@
+from winrna_lib.window_peaks import WindowPeaks
+from winrna_lib.helpers import Helpers
 import pandas as pd
 import pybedtools as pybed
-from io import StringIO
-from winrna_lib.window_peaks import WindowPeaks
 import os
 from tqdm import tqdm
 
@@ -27,6 +27,8 @@ class WindowSRNA:
     def call_window_srna(self, min_len: int, max_len: int, min_distance: int,
                          threshold_factor: float, min_height: float):
         for seqid in self.seqids:
+            if seqid != "NC_002516.2":
+                continue
             print(f"=> Calling 5' ends for SeqID: {seqid}")
             five_end_peaks_obj = WindowPeaks(self.five_end_wiggle[seqid],
                                              min_distance, threshold_factor, min_height,
@@ -73,21 +75,7 @@ class WindowSRNA:
         ret_df.reset_index(inplace=True, drop=True)
         return ret_df
 
-    def export_to_gff(self, out_path: str, anno_source="_", anno_type="_"):
-        gff_df = self.srna_candidates.copy()
-        non_gff_columns = [x for x in gff_df.columns.tolist() if x not in self.gff_col_names]
-        gff_df["source"] = anno_source
-        gff_df["type"] = anno_type
-        gff_df["score"] = "."
-        gff_df["strand"] = self.strand
-        gff_df["phase"] = "."
-        for i in gff_df.index:
-            gff_df.at[i, "attributes"] = f'ID={anno_type}_{gff_df.at[i, "seqid"]}{self.strand}_{i}'\
-                                         f';name={anno_type}_{gff_df.at[i, "seqid"]}{self.strand}_{i}'
-            for col in non_gff_columns:
-                gff_df.at[i, "attributes"] += f';{col}={gff_df.at[i, col]}'
-
-        gff_df.drop(non_gff_columns, inplace=True, axis=1)
-        gff_df = gff_df.reindex(columns=self.gff_col_names)
+    def export_to_gff(self, out_path: str, anno_source="NA", anno_type="NA"):
+        gff_df = Helpers.get_gff_df(self.srna_candidates, anno_source=anno_source, anno_type=anno_type)
         gff_df.to_csv(os.path.abspath(out_path), index=False, sep="\t", header=False)
         print("GFF exported")

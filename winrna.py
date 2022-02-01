@@ -1,7 +1,9 @@
-from winrna_lib.wiggle import Wiggle
 from winrna_lib.window_srna import WindowSRNA
-from winrna_lib.gff import GFF
 from winrna_lib.rna_classifier import RNAClassifier
+from winrna_lib.differential_classifier import DifferentialClassifier
+from winrna_lib.helpers import Helpers
+from winrna_lib.wiggle import Wiggle
+from winrna_lib.gff import GFF
 import argparse
 import pandas as pd
 import os
@@ -53,10 +55,16 @@ def main():
             control_srnas_df["strand"] = strand_sign
             tmp_df1 = pd.concat([tmp_df1, treated_srnas_df], ignore_index=True)
             tmp_df2 = pd.concat([tmp_df2, control_srnas_df], ignore_index=True)
-        tmp_df1 = to_gff_df(tmp_df1, "WinRNA")
-        tmp_df2 = to_gff_df(tmp_df2, "WinRNA")
-        tmp_df1 = RNAClassifier(gff_df, tmp_df1).classes
-        tmp_df2 = RNAClassifier(gff_df, tmp_df2).classes
+
+        tmp_df1 = Helpers.get_gff_df(tmp_df1, anno_source="WinRNA", anno_type="candidate", new_id=True)
+        tmp_df2 = Helpers.get_gff_df(tmp_df2, anno_source="WinRNA", anno_type="candidate", new_id=True)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2).classes)
+        tmp_df1["attributes"] = tmp_df1["extra_attributes"]
+        tmp_df1.drop(["extra_attributes"], inplace=True, axis=1)
+        tmp_df2["attributes"] = tmp_df2["extra_attributes"]
+        tmp_df2.drop(["extra_attributes"], inplace=True, axis=1)
+        tmp_df1, tmp_df2 = DifferentialClassifier({"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}).score_similarity()
 
         # Exports
         tmp_df1.to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.gff"),
@@ -79,46 +87,12 @@ def _call_srnas(five_end_path, three_end_path, args):
     return srnas.srna_candidates
 
 
-def to_gff_df(gff_df: pd.DataFrame, anno_source="_") -> pd.DataFrame:
-    anno_type = "candidate"
-    gff_col_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
-    non_gff_columns = [x for x in gff_df.columns.tolist() if x not in gff_col_names]
-    gff_df["source"] = anno_source
-    gff_df["type"] = anno_type
-    gff_df["score"] = "."
-    gff_df["phase"] = "."
-    for i in gff_df.index:
-        strand = "F" if gff_df.at[i, "strand"] == "+" else "R"
-        gff_df.at[i, "attributes"] = f'ID={gff_df.at[i, "seqid"]}{strand}_{anno_type}_{i}'\
-                                     f';name={gff_df.at[i, "seqid"]}{strand}_{anno_type}_{i}' \
-                                     f';{gff_df.at[i, "attributes"]}'
-        for col in non_gff_columns:
-            gff_df.at[i, "attributes"] += f";{col}={gff_df.at[i, col]}"
-    gff_df.drop(non_gff_columns, inplace=True, axis=1)
-    gff_df = gff_df.reindex(columns=gff_col_names)
-    gff_df.sort_values(["seqid", "start", "end"], inplace=True)
-    return gff_df
-
-
 def to_table_df(df):
-    df = expand_attributes_to_columns(df)
+    df = Helpers.expand_attributes_to_columns(df)
     df.sort_values(["seqid", "start", "end"], inplace=True)
     df.reset_index(inplace=True, drop=True)
     return df
 
 
-def expand_attributes_to_columns(df):
-    if "attributes" in df.columns:
-        for i in df.index:
-            attributes = df.at[i, "attributes"].split(";")
-            for attr in attributes:
-                k, v = attr.split("=")
-                df.at[i, k] = v
-        df.drop(["attributes"], inplace=True, axis=1)
-    return df
-
-
-
 if __name__ == '__main__':
-
     main()

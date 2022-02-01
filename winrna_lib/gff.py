@@ -43,29 +43,3 @@ class GFF:
             return self.gff_df
         else:
             return gff_df
-
-    @staticmethod
-    def write_to_gff(peaks_df: pd.DataFrame, out_path: str) -> None:
-        strand_func = lambda x: "F" if x == "+" else "R"
-        wrap_attr_func = lambda x: ";".join([f"{k}={v}" for k, v in x.items()])
-        col_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
-        peaks_df["source"] = ""
-        peaks_df["type"] = ""
-        peaks_df["score"] = "."
-        peaks_df["phase"] = "."
-        peaks_df = peaks_df.round(2)
-        atrr_cols = [col for col in peaks_df.columns.tolist() if col not in col_names]
-        peaks_df["attributes"] = ""
-        for i in peaks_df.index:
-            peaks_df.at[i, "attributes"] = \
-                f"ID={peaks_df.at[i, 'seqid']}{strand_func(peaks_df.at[i, 'strand'])}_{i};" + \
-                f"name={peaks_df.at[i, 'seqid']}{strand_func(peaks_df.at[i, 'strand'])}_{i};" + \
-                f"{wrap_attr_func(peaks_df.loc[i, atrr_cols])}"
-
-        peaks_df.drop(atrr_cols, inplace=True, axis=1)
-        peaks_df = peaks_df.reindex(col_names, axis="columns")
-        out_gff = f"{wiggle_path}.gff"
-        if args.output_dir is not None:
-            wiggle_basename = os.path.basename(wiggle_path)
-            out_gff = f"{os.path.dirname(args.output_dir)}/{wiggle_basename}.gff"
-        peaks_df.to_csv(out_gff, sep="\t", header=False, index=False)

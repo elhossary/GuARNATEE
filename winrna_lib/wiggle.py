@@ -30,15 +30,15 @@ class Wiggle:
             logger.info(f"==> Loading file: {os.path.basename(self.file_path)}")
             file_header, all_contents, empty_seqids = self._parse_wiggle_str(raw_file.read())
             current_wiggle_meta = self.parse_wiggle_header(file_header, current_wiggle_meta)
-            for content_header, content in tqdm(all_contents.items(),
-                                                desc=f"=> Loading wiggle file: {os.path.basename(self.file_path)}"):
+            for content_header, content in \
+                    tqdm(all_contents.items(), desc=f"=> Loading wiggle file: {os.path.basename(self.file_path)}"):
                 current_wiggle_meta = self.parse_wiggle_header(content_header, current_wiggle_meta)
                 seqid = current_wiggle_meta["variableStep_chrom"]
                 chrom_size = self.chrom_sizes[seqid] if seqid in self.chrom_sizes.keys() else self.get_seq_length(seqid)
                 self.coverages[seqid] = np.fromstring(content, sep=' ').reshape(-1, 2)
                 if chrom_size is None:
                     chrom_size = self.coverages[seqid][-1, 0]
-                    logger.warning(f"Could not get the chromosome size online, "
+                    logger.warning(f"\nCould not get the chromosome size online, "
                                    f"maximum wiggle position ({chrom_size}) will be used")
                 else:
                     logger.info(f'====> Size retrieved for {seqid} is: {chrom_size}')

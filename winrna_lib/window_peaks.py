@@ -1,3 +1,4 @@
+from winrna_lib.helpers import Helpers
 import os.path
 from tqdm import tqdm
 import numpy as np
@@ -108,7 +109,6 @@ class WindowPeaks:
         gff_df.drop(["peak_index"], inplace=True, axis=1)
         columns.remove("peak_index")
         gff_df["attributes"] = ""
-
         for indx in gff_df.index:
             gff_df.at[indx, "attributes"] = f"{self.prefix}_id={self.prefix}{indx}"
         for column in columns:
@@ -125,18 +125,6 @@ class WindowPeaks:
         non_gff_columns.remove("peak_index")
         gff_df["end"] = gff_df["start"]
         gff_df["seqid"] = seqid
-        gff_df["source"] = anno_source
-        gff_df["type"] = anno_type
-        gff_df["score"] = "."
-        gff_df["strand"] = strand
-        gff_df["phase"] = "."
-        for i in gff_df.index:
-            gff_df.at[i, "attributes"] = f'ID={anno_type}_{gff_df.at[i, "seqid"]}{strand}_{i}'\
-                                         f';name={anno_type}_{gff_df.at[i, "seqid"]}{strand}_{i}'
-            for col in non_gff_columns:
-                gff_df.at[i, "attributes"] += f';{col}={gff_df.at[i, col]}'
-
-        gff_df.drop(non_gff_columns, inplace=True, axis=1)
-        gff_df = gff_df.reindex(columns=gff_columns)
+        gff_df = Helpers.get_gff_df(gff_df, anno_source=anno_source, anno_type=anno_type, strand=strand, new_id=True)
         gff_df.to_csv(os.path.abspath(out_path), index=False, sep="\t", header=False)
         print("GFF exported")
