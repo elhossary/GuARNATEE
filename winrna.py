@@ -43,6 +43,7 @@ def main():
             working_wigs = wig_info_df[(wig_info_df["strand"] == strand) &
                                        (wig_info_df["file_desc"] == desc)].loc[:, ["file_path", "treatment"]]
             if working_wigs.shape[0] not in [3]:
+                print("Error: non-uniformed wiggles passed")
                 exit(1)
             working_pathes = dict(zip(working_wigs["treatment"], working_wigs["file_path"]))
             treated_srnas_df = \
