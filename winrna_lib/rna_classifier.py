@@ -141,7 +141,7 @@ class RNAClassifier:
 
     def prefilter_candidates(self):
         self._drop_overlaps_of_cds_5_ends()
-        self._drop_unwanted_classes()
+        #self._drop_unwanted_classes()
         #self._drop_cross_overlapping_annotations()
 
     def _drop_overlaps_of_cds_5_ends(self) -> None:

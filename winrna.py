@@ -25,8 +25,6 @@ def main():
                         help="")
     parser.add_argument("--min_raw_height", default=10, type=float,
                         help="")
-    parser.add_argument("--min_bg_fold_change", default=1, type=float,
-                        help="")
     parser.add_argument("--gff_out_dir", required=True, type=str,
                         help="")
     args = parser.parse_args()
@@ -55,15 +53,10 @@ def main():
             control_srnas_df["strand"] = strand_sign
             tmp_df1 = pd.concat([tmp_df1, treated_srnas_df], ignore_index=True)
             tmp_df2 = pd.concat([tmp_df2, control_srnas_df], ignore_index=True)
-
         tmp_df1 = Helpers.get_gff_df(tmp_df1, anno_source="WinRNA", anno_type="candidate", new_id=True)
         tmp_df2 = Helpers.get_gff_df(tmp_df2, anno_source="WinRNA", anno_type="candidate", new_id=True)
         tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1).classes)
         tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2).classes)
-        tmp_df1["attributes"] = tmp_df1["extra_attributes"]
-        tmp_df1.drop(["extra_attributes"], inplace=True, axis=1)
-        tmp_df2["attributes"] = tmp_df2["extra_attributes"]
-        tmp_df2.drop(["extra_attributes"], inplace=True, axis=1)
         tmp_df1, tmp_df2 = DifferentialClassifier({"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}).score_similarity()
 
         # Exports
@@ -73,10 +66,10 @@ def main():
                        index=False, sep="\t", header=False)
         to_table_df(tmp_df1) \
             .to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.tsv"),
-                    index=True, sep="\t", header=True)
+                    index=True, sep="\t", header=True, na_rep="")
         to_table_df(tmp_df2) \
             .to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_neg_{desc}.tsv"),
-                    index=True, sep="\t", header=True)
+                    index=True, sep="\t", header=True, na_rep="")
     exit(0)
 
 

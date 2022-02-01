@@ -30,16 +30,23 @@ class Helpers:
     @staticmethod
     def warp_non_gff_columns(gff_df: pd.DataFrame) -> pd.DataFrame:
         gff_columns = \
-            ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes", "extra_attributes"]
+            ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
         non_gff_columns = [x for x in gff_df.columns.tolist() if x not in gff_columns]
         if len(non_gff_columns) == 0:
             return gff_df
         for i in gff_df.index:
+            extra_attr = [f'{col}={gff_df.at[i, col]}' for col in non_gff_columns]
             gff_df.at[i, "extra_attributes"] = \
-                ";".join(
-                    [f'{col}={gff_df.at[i, col]}' for col in non_gff_columns if gff_df.at[i, col] not in ["", np.nan]])
+                ";".join([x for x in extra_attr if "=nan" not in x]).strip(";")
+        if "attributes" in gff_df.columns.tolist():
+            gff_df["attributes"] = gff_df["attributes"] + ";" + gff_df["extra_attributes"]
+            non_gff_columns.append("extra_attributes")
+        else:
+            gff_df.rename(columns={"extra_attributes": "attributes"}, inplace=True)
+
         gff_df.drop(non_gff_columns, inplace=True, axis=1)
         gff_df = gff_df.reindex(columns=gff_columns)
+        gff_df["attributes"] = gff_df["attributes"].str.strip(to_strip=";")
         return gff_df
 
     @staticmethod
@@ -83,10 +90,7 @@ class Helpers:
                 attr_addition = ";".join([f'{k}={v}' for k, v in attr.items()])
                 if attr_addition != "":
                     df.at[i, "attributes"] += ";" + attr_addition
-
+        df["attributes"] = df["attributes"].str.strip(to_strip=";")
         df = Helpers.warp_non_gff_columns(df)
-        if "extra_attributes" in df.columns.tolist():
-            df["attributes"] = df["attributes"] + ";" + df["extra_attributes"]
-            df.drop(["extra_attributes"], inplace=True, axis=1)
         df.sort_values(["seqid", "start", "end"], inplace=True)
         return df
