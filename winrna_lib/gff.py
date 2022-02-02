@@ -25,7 +25,7 @@ class GFF:
         self.gff_df.reset_index(drop=True, inplace=True)
         self.regions = pd.concat([self.regions, self.gff_df[self.gff_df["type"] == "region"]])
         self.gff_df.drop(self.regions.index, inplace=True, axis=0)
-        print(f"Parsed {len(parsed_paths)} GFFs")
+        print(f"==> Parsed {len(parsed_paths)} GFFs")
 
     def filter(self, anno_type=None, min_len=0, max_len=0, inplace=False) -> pd.DataFrame:
         gff_df = self.gff_df.copy()

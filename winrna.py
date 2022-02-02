@@ -25,7 +25,7 @@ def main():
                         help="")
     parser.add_argument("--min_raw_height", default=10, type=float,
                         help="")
-    parser.add_argument("--gff_out_dir", required=True, type=str,
+    parser.add_argument("--out_dir", required=True, type=str,
                         help="")
     args = parser.parse_args()
 
@@ -61,17 +61,14 @@ def main():
         tmp_df1, tmp_df2 = DifferentialClassifier({"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}).score_similarity()
 
         # Exports
-        tmp_df1.to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.gff"),
-                       index=False, sep="\t", header=False)
-        tmp_df2.to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_neg_{desc}.gff"),
-                       index=False, sep="\t", header=False)
-        to_table_df(tmp_df1) \
-            .to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_pos_{desc}.tsv"),
-                    index=True, sep="\t", header=True, na_rep="")
-        to_table_df(tmp_df2) \
-            .to_csv(os.path.abspath(f"{os.path.dirname(args.gff_out_dir)}/TEX_neg_{desc}.tsv"),
-                    index=True, sep="\t", header=True, na_rep="")
+        tmp_df1.to_csv(os.path.abspath(f"{args.out_dir}/TEX_pos_{desc}.gff"), index=False, sep="\t", header=False)
+        tmp_df2.to_csv(os.path.abspath(f"{args.out_dir}/TEX_neg_{desc}.gff"), index=False, sep="\t", header=False)
+        to_table_df(tmp_df1).to_csv(
+            os.path.abspath(f"{args.out_dir}/TEX_pos_{desc}.tsv"), index=True, sep="\t", header=True, na_rep="")
+        to_table_df(tmp_df2).to_csv(
+            os.path.abspath(f"{args.out_dir}/TEX_neg_{desc}.tsv"), index=True, sep="\t", header=True, na_rep="")
     exit(0)
+
 
 
 def _call_srnas(five_end_path, three_end_path, args):
