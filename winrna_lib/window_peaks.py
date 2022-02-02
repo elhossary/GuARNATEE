@@ -33,7 +33,8 @@ class WindowPeaks:
             if window_peaks is None:
                 continue
             window_peaks[:, 0] += window[0]
-            all_peaks.append(window_peaks)
+            if window_peaks.size > 0:
+                all_peaks.append(window_peaks)
         all_peaks = np.concatenate(all_peaks, axis=0)
         if self.is_reversed:
             #all_peaks[:, 0] -= 1
