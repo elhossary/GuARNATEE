@@ -59,6 +59,8 @@ def main():
         tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1).classes)
         tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier({"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}).score_similarity()
+        tmp_df1["source"] = "WinRNA"
+        tmp_df2["source"] = "WinRNA"
 
         # Exports
         tmp_df1.to_csv(os.path.abspath(f"{args.out_dir}/TEX_pos_{desc}.gff"), index=False, sep="\t", header=False)
