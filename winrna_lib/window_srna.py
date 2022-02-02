@@ -41,8 +41,12 @@ class WindowSRNA:
             three_end_peaks_obj.export_to_gff(
                 "three.gff", seqid=seqid, strand=self.strand, anno_source="NA", anno_type="TS")
             """
-            five_end_peaks_bed = pybed.BedTool(five_end_peaks_obj.get_bed_str(seqid), from_string=True).sort()
-            three_end_peaks_bed = pybed.BedTool(three_end_peaks_obj.get_bed_str(seqid), from_string=True).sort()
+            five_end_peaks_str = five_end_peaks_obj.get_bed_str(seqid)
+            three_end_peaks_str = three_end_peaks_obj.get_bed_str(seqid)
+            if five_end_peaks_str is None or three_end_peaks_str is None:
+                continue
+            five_end_peaks_bed = pybed.BedTool(five_end_peaks_str, from_string=True).sort()
+            three_end_peaks_bed = pybed.BedTool(three_end_peaks_str, from_string=True).sort()
             connected_peaks_df = \
                 self.connect_sites(five_end_peaks_bed, three_end_peaks_bed, min_len, max_len) \
                     if self.strand == "+" else \

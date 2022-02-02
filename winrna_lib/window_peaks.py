@@ -35,6 +35,8 @@ class WindowPeaks:
             window_peaks[:, 0] += window[0]
             if window_peaks.size > 0:
                 all_peaks.append(window_peaks)
+        if not all_peaks:  # Exit if there is no peaks predicted
+            return None
         all_peaks = np.concatenate(all_peaks, axis=0)
         if self.is_reversed:
             #all_peaks[:, 0] -= 1
@@ -89,6 +91,8 @@ class WindowPeaks:
 
     def get_peaks_df(self):
         # f"{self.prefix}_background_fold_change"
+        if self.peaks_arr is None:
+            return None
         peaks_df = pd.DataFrame(data=self.peaks_arr,
                                 columns=["peak_index",
                                          f"{self.prefix}_diff_height",
@@ -103,6 +107,8 @@ class WindowPeaks:
 
     def get_bed_str(self, seqid: str):
         gff_df = self.get_peaks_df()
+        if gff_df is None:
+            return None
         columns = gff_df.columns.tolist()
         gff_df["seqid"] = seqid
         gff_df["start"] = gff_df["peak_index"] + 1
