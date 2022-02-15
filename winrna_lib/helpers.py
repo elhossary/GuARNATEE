@@ -1,9 +1,8 @@
+import sys
 import pandas as pd
-import numpy as np
 
 
 class Helpers:
-
     def __init__(self):
         pass
 
@@ -25,21 +24,36 @@ class Helpers:
     @staticmethod
     def parse_attributes(attr_str):
         attr_str = attr_str.strip(";")
-        return {k.lower(): v for k, v in dict(item.split("=") for item in attr_str.split(";")).items()}
+        return {
+            k.lower(): v
+            for k, v in dict(item.split("=") for item in attr_str.split(";")).items()
+        }
 
     @staticmethod
     def warp_non_gff_columns(gff_df: pd.DataFrame) -> pd.DataFrame:
-        gff_columns = \
-            ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
+        gff_columns = [
+            "seqid",
+            "source",
+            "type",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "phase",
+            "attributes",
+        ]
         non_gff_columns = [x for x in gff_df.columns.tolist() if x not in gff_columns]
         if len(non_gff_columns) == 0:
             return gff_df
         for i in gff_df.index:
-            extra_attr = [f'{col}={gff_df.at[i, col]}' for col in non_gff_columns]
-            gff_df.at[i, "extra_attributes"] = \
-                ";".join([x for x in extra_attr if "=nan" not in x]).strip(";")
+            extra_attr = [f"{col}={gff_df.at[i, col]}" for col in non_gff_columns]
+            gff_df.at[i, "extra_attributes"] = ";".join(
+                [x for x in extra_attr if "=nan" not in x]
+            ).strip(";")
         if "attributes" in gff_df.columns.tolist():
-            gff_df["attributes"] = gff_df["attributes"] + ";" + gff_df["extra_attributes"]
+            gff_df["attributes"] = (
+                gff_df["attributes"] + ";" + gff_df["extra_attributes"]
+            )
             non_gff_columns.append("extra_attributes")
         else:
             gff_df.rename(columns={"extra_attributes": "attributes"}, inplace=True)
@@ -51,16 +65,26 @@ class Helpers:
 
     @staticmethod
     def get_gff_df(df, anno_source="", anno_type="", strand="", new_id=False):
-        gff_columns = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
+        gff_columns = [
+            "seqid",
+            "source",
+            "type",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "phase",
+            "attributes",
+        ]
         essential_columns = ["seqid", "start", "end"]
         df_columns = df.columns.tolist()
         # Checking inputs
         if not set(essential_columns).issubset(df_columns):
             print("Error: Missing essential columns")
-            exit(1)
+            sys.exit(1)
         if "strand" not in df_columns and strand not in ["+", "-"]:
             print("Error: Missing strand information")
-            exit(1)
+            sys.exit(1)
         # Adding missing columns
         if "source" not in df_columns:
             df["source"] = anno_source
@@ -80,14 +104,18 @@ class Helpers:
             strand_letter = "F" if df.at[i, "strand"] == "+" else "R"
             if new_id:
                 old_attr_str = df.at[i, "attributes"]
-                attr = Helpers.parse_attributes(old_attr_str) if old_attr_str != "" else {}
+                attr = (
+                    Helpers.parse_attributes(old_attr_str) if old_attr_str != "" else {}
+                )
                 if "id" in attr.keys():
                     del attr["id"]
                 if "name" in attr.keys():
                     del attr["name"]
-                df.at[i, "attributes"] = f'ID={df.at[i, "seqid"]}{strand_letter}_{anno_type}_{i}' \
-                                         f';name={df.at[i, "seqid"]}{strand_letter}_{anno_type}_{i}'
-                attr_addition = ";".join([f'{k}={v}' for k, v in attr.items()])
+                df.at[i, "attributes"] = (
+                    f'ID={df.at[i, "seqid"]}{strand_letter}_{anno_type}_{i}'
+                    f';name={df.at[i, "seqid"]}{strand_letter}_{anno_type}_{i}'
+                )
+                attr_addition = ";".join([f"{k}={v}" for k, v in attr.items()])
                 if attr_addition != "":
                     df.at[i, "attributes"] += ";" + attr_addition
         df["attributes"] = df["attributes"].str.strip(to_strip=";")

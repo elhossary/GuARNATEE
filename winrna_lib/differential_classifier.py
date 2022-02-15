@@ -5,6 +5,9 @@ from winrna_lib.helpers import Helpers
 
 
 class DifferentialClassifier:
+    """
+    This class is to compare two sets of prediction typically TEX+ and TEX-
+    """
 
     def __init__(self, in_dict: dict):
         # in_dict takes a pair of dataframes in as values of a dict where the keys are the lib names
@@ -21,20 +24,49 @@ class DifferentialClassifier:
         return bed1_score_df, bed2_score_df
 
     @staticmethod
-    def _score_similarity(df1, df2, df1_lib_name, df2_lib_name):
-        gff_columns = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
-        scores_columns = ["overlaps_count", "overlap_size", "length", "overlap_percentage"]
+    def _score_similarity(
+        df1: pd.DataFrame, df2: pd.DataFrame, df1_lib_name: str, df2_lib_name: str
+    ) -> pd.DataFrame:
+        """ """
+        gff_columns = [
+            "seqid",
+            "source",
+            "type",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "phase",
+            "attributes",
+        ]
+        scores_columns = [
+            "overlaps_count",
+            "overlap_size",
+            "length",
+            "overlap_percentage",
+        ]
         for i in df1.index:
             df1.at[i, "attributes"] += f";lib_type={df1_lib_name}"
         bed1 = pybed.BedTool.from_dataframe(df1).sort()
         bed2 = pybed.BedTool.from_dataframe(df2).sort()
-        bed_score_df = bed1.coverage(bed2, s=True).to_dataframe(names=gff_columns + scores_columns)
+        bed_score_df = bed1.coverage(bed2, s=True).to_dataframe(
+            names=gff_columns + scores_columns
+        )
         bed_score_df.drop(["overlap_size", "length"], inplace=True, axis=1)
         bed_score_df["overlap_percentage"] = bed_score_df["overlap_percentage"] * 100
         bed_score_df["overlap_percentage"] = bed_score_df["overlap_percentage"].round(2)
-        bed_score_df["overlap_percentage"].replace(to_replace=0.0, value=np.nan, inplace=True)
-        bed_score_df["overlaps_count"].replace(to_replace=0.0, value=np.nan, inplace=True)
-        bed_score_df.rename(columns={"overlap_percentage": f"{df2_lib_name}_overlap_percentage",
-                                     "overlaps_count": f"{df2_lib_name}_overlaps_count"}, inplace=True)
+        bed_score_df["overlap_percentage"].replace(
+            to_replace=0.0, value=np.nan, inplace=True
+        )
+        bed_score_df["overlaps_count"].replace(
+            to_replace=0.0, value=np.nan, inplace=True
+        )
+        bed_score_df.rename(
+            columns={
+                "overlap_percentage": f"{df2_lib_name}_overlap_percentage",
+                "overlaps_count": f"{df2_lib_name}_overlaps_count",
+            },
+            inplace=True,
+        )
         bed_score_df = Helpers.warp_non_gff_columns(bed_score_df)
         return bed_score_df
