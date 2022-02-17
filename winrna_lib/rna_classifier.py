@@ -215,9 +215,23 @@ class RNAClassifier:
         if not diff:
             return [0, full_size, 0], [0, 100, 0]
         intersect = sorted(partial_set.intersection(full_set))
-        cga = [list(cg) for cg in consecutive_groups(diff)]  # must be a list of 2 lists
-        diff_before = cga[0]
-        diff_after = cga[1]
+        cga = [list(cg) for cg in consecutive_groups(diff)]  # MUST be a list of 2 lists
+        cga_len = len(cga)
+        diff_before = []
+        diff_after = []
+        if cga_len == 0:
+            return [0, full_size, 0], [0, 100, 0]
+        elif cga_len == 1:  # Special case
+            if max(cga[0]) < min(partial):
+                diff_before = cga[0]
+            if min(cga[0]) > max(partial):
+                diff_after = cga[0]
+        elif cga_len == 2:  # this is the expected case
+            diff_before = cga[0]
+            diff_after = cga[1]
+        else:
+            print("Fatal error")
+            exit(1)
         intersect_size = len(intersect)
         diff_before_size = len(diff_before)
         diff_after_size = len(diff_after)

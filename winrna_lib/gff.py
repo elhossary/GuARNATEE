@@ -39,7 +39,7 @@ class GFF:
             [self.regions, self.gff_df[self.gff_df["type"] == "region"]]
         )
         self.gff_df.drop(self.regions.index, inplace=True, axis=0)
-        print(f"==> Parsed {len(parsed_paths)} GFFs")
+        print(f"==> Parsed {len(parsed_paths)} GFF files")
 
     def filter(
         self, anno_type=None, min_len=0, max_len=0, inplace=False

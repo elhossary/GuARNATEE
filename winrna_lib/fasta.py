@@ -9,7 +9,7 @@ class Fasta:
         self.fasta_paths = fasta_paths
         self.fwd_seqs = {}
         self.rev_seqs = {}
-        self.organisms = {}
+        self.organism_seqid_groups = {}
         self.parse()
 
     def parse(self):
@@ -22,15 +22,16 @@ class Fasta:
             parse_tmp = SeqIO.parse(os.path.abspath(fasta_path), "fasta")
             for seq_record in parse_tmp:
                 seq_desc = seq_record.description.split()
-                specie_name = f"{seq_desc[1]}_{seq_desc[2]}"
-                if specie_name in self.organisms.keys():
-                    self.organisms[specie_name].append(f"{seq_desc[0]}")
+                specie_name = f"{seq_desc[1]}_{seq_desc[2]}" if len(seq_desc) >= 3 else ""
+                if specie_name in self.organism_seqid_groups.keys():
+                    self.organism_seqid_groups[specie_name].append(f"{seq_desc[0]}")
                 else:
-                    self.organisms[specie_name] = [seq_desc[0]]
+                    self.organism_seqid_groups[specie_name] = [seq_desc[0]]
                 self.fwd_seqs[seq_record.id] = str(seq_record.seq)
                 self.rev_seqs[seq_record.id] = str(seq_record.reverse_complement().seq)[
                     ::-1
                 ]  # 3` to 5` direction of the reverse complement
+        print(f"==> Parsed {len(parsed_paths)} Fasta files")
     """
     @staticmethod
     def count_bases(base: str, input_seq: str):

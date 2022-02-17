@@ -7,7 +7,8 @@ class Helpers:
         pass
 
     @staticmethod
-    def expand_attributes_to_columns(df) -> pd.DataFrame:
+    def expand_attributes_to_columns(in_df) -> pd.DataFrame:
+        df = in_df.copy()
         df.sort_values(["seqid", "start", "end"], inplace=True)
         df.reset_index(inplace=True, drop=True)
         if "attributes" in df.columns:

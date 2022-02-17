@@ -44,7 +44,7 @@ def main():
     # load files
     gff_df = GFF(gff_paths=args.gffs).gff_df
     fastas = Fasta(fasta_paths=args.fastas)
-    seqid_groups = fastas.organisms
+    seqid_groups = fastas.organism_seqid_groups
     wig_info_df = pd.DataFrame(
         [x.split(":") for x in args.wigs],
         columns=["file_path", "strand", "condition", "replicate", "treatment"],
@@ -136,7 +136,8 @@ def _call_srnas(five_end_path, three_end_path, args):
     return srnas.srna_candidates
 
 
-def to_table_df(df):
+def to_table_df(in_df):
+    df = in_df.copy()
     df = Helpers.expand_attributes_to_columns(df)
     df.sort_values(["seqid", "start", "end"], inplace=True)
     df.reset_index(inplace=True, drop=True)
