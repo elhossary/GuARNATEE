@@ -22,7 +22,7 @@ class Fasta:
             parse_tmp = SeqIO.parse(os.path.abspath(fasta_path), "fasta")
             for seq_record in parse_tmp:
                 seq_desc = seq_record.description.split()
-                specie_name = f"{seq_desc[1]}_{seq_desc[2]}" if len(seq_desc) >= 3 else ""
+                specie_name = f"{seq_desc[1]}_{seq_desc[2]}" if len(seq_desc) >= 3 else "undefined"
                 if specie_name in self.organism_seqid_groups.keys():
                     self.organism_seqid_groups[specie_name].append(f"{seq_desc[0]}")
                 else:
