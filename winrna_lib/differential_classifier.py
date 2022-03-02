@@ -23,9 +23,8 @@ class DifferentialClassifier:
         bed2_score_df = self._score_similarity(df2, df1, df1_lib, df1_lib)
         return bed1_score_df, bed2_score_df
 
-    @staticmethod
     def _score_similarity(
-        df1: pd.DataFrame, df2: pd.DataFrame, df1_lib_name: str, df2_lib_name: str
+        self, df1: pd.DataFrame, df2: pd.DataFrame, df1_lib_name: str, df2_lib_name: str
     ) -> pd.DataFrame:
         """ """
         gff_columns = [

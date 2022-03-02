@@ -5,6 +5,7 @@ from scipy import signal, stats
 from tqdm import tqdm
 from more_itertools import consecutive_groups
 from winrna_lib.helpers import Helpers
+
 np.seterr(divide="ignore")
 
 
@@ -36,7 +37,7 @@ class WindowPeaks:
         all_peaks = []
 
         for window in tqdm(self.windows, desc="==> Calling peaks: ", postfix=""):
-            window_sig_slice = sig_deriv[window[0] : window[1]]
+            window_sig_slice = sig_deriv[window[0]: window[1]]
             window_peaks = self._call_peaks_in_slice(
                 window_sig_slice, self.threshold_factor, self.min_peak_distance
             )
@@ -55,35 +56,18 @@ class WindowPeaks:
         else:
             all_peaks[:, 0] += 1
         raw_heights = [self.raw_signal[x] for x in all_peaks[:, 0].astype(int)]
-        mean_step_before = np.array(
-            [
-                np.mean(self.raw_signal[x - 4 : x - 1])
-                for x in all_peaks[:, 0].astype(int)
-            ]
-        )
-        mean_step_after = np.array(
-            [
-                np.mean(self.raw_signal[x + 1 : x + 4])
-                for x in all_peaks[:, 0].astype(int)
-            ]
-        )
-        step_factor = (
-            mean_step_before / mean_step_after
-            if self.is_reversed
-            else mean_step_after / mean_step_before
-        )
+        mean_step_before = np.array([np.mean(self.raw_signal[x - 4 : x - 1]) for x in all_peaks[:, 0].astype(int)])
+        mean_step_after = np.array([np.mean(self.raw_signal[x + 1 : x + 4]) for x in all_peaks[:, 0].astype(int)])
+        step_factor = (mean_step_before / mean_step_after if self.is_reversed else mean_step_after / mean_step_before)
         # fold_change = np.abs(np.log2(mean_step_after / mean_step_before))\
         #    if self.is_reversed else \
         #    np.abs(np.log2(mean_step_before / mean_step_after))
 
-        # plateau_height calculated as the average coverage for 30nt of peak height
-        mean_plateau_height = [
-            np.round(np.mean(self.raw_signal[x - 29 : x]), 2)
-            if self.is_reversed
-            else np.round(np.mean(self.raw_signal[x : x + 29]), 2)
-            for x in all_peaks[:, 0].astype(int)
-        ]
-        #                               np.round(fold_change, 2),
+        # plateau_height calculated as the average coverage for 30nt of peak height ignored if it contains zeros
+        plateau_cov = np.array([self.raw_signal[x - 29 : x] if self.is_reversed else self.raw_signal[x : x + 29] for x in all_peaks[:, 0].astype(int)])
+        plateau_cov_mask = np.array([np.all(pc) for pc in plateau_cov])
+        mean_plateau_height = np.array([np.round(np.mean(pc), 2) for pc in plateau_cov])
+        # np.round(fold_change, 2),
         all_peaks = np.stack(
             (
                 all_peaks[:, 0],
@@ -96,7 +80,8 @@ class WindowPeaks:
             ),
             axis=-1,
         )
-        all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]
+        all_peaks = all_peaks[plateau_cov_mask]  # filter interrupted signals
+        all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]  # filter by minimum height
         return all_peaks
 
     @staticmethod
@@ -121,17 +106,19 @@ class WindowPeaks:
             np.percentile(data, 75) + stats.iqr(data)
         ) * (1.5 * factor)
         # Call peaks
+        threshold_train_set = np.abs(signal_slice[signal_slice != 0])
+        if threshold_train_set.size == 0:
+            return None
+        threshold = threshold_func(threshold_train_set, threshold_factor)
         peaks, peaks_props = signal.find_peaks(
-            signal_slice, height=(None, None), distance=30
-        )
+            signal_slice, height=(threshold, None), distance=30)
         if peaks.size == 0:
             return None
-        # Generate threshold
-        threshold = threshold_func(peaks_props["peak_heights"], threshold_factor)
+
         # Filter by recalling peaks with threshold
-        peaks, peaks_props = signal.find_peaks(
-            signal_slice, height=(threshold, None), distance=min_peak_distance
-        )
+        #peaks, peaks_props = signal.find_peaks(
+        #    signal_slice, height=(threshold, None), distance=min_peak_distance
+        #)
         return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):

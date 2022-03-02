@@ -52,7 +52,7 @@ def main():
     wig_info_df["file_desc"] = (
         wig_info_df["condition"] + "_rep_" + wig_info_df["replicate"]
     )
-
+    export_df = pd.DataFrame()
     for desc in wig_info_df["file_desc"].unique().tolist():
         tmp_df1 = pd.DataFrame()
         tmp_df2 = pd.DataFrame()
@@ -83,43 +83,36 @@ def main():
         tmp_df2 = Helpers.get_gff_df(
             tmp_df2, anno_source="WinRNA", anno_type="candidate", new_id=True
         )
-        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1).classes)
-        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2).classes)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1, fastas).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2, fastas).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
             {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
         ).score_similarity()
-        tmp_df1["source"] = "WinRNA"
-        tmp_df2["source"] = "WinRNA"
+        tmp_df1["replicate"] = desc
+        tmp_df2["replicate"] = desc
+        export_df = pd.concat([export_df, tmp_df1, tmp_df2], ignore_index=True)
+    export_df.sort_values(["seqid", "start", "end"], inplace=True)
+    export_df.reset_index(inplace=True, drop=True)
+    export_df["source"] = "WinRNA"
 
-        # Exports
+    # Exports
+    with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/all_candidates.xlsx"), engine="openpyxl") as writer:
         for seqid_group, seqids in seqid_groups.items():
-            export_df1 = tmp_df1[tmp_df1["seqid"].isin(seqids)]
-            export_df2 = tmp_df2[tmp_df2["seqid"].isin(seqids)]
-            export_df1.to_csv(
-                os.path.abspath(f"{args.out_dir}/{seqid_group}_TEX_pos_{desc}.gff"),
+            export_tmp_df = export_df[export_df["seqid"].isin(seqids)]
+            export_tmp_df.reset_index(inplace=True, drop=True)
+            Helpers.warp_non_gff_columns(export_tmp_df).to_csv(
+                os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.gff"),
                 index=False,
                 sep="\t",
                 header=False,
             )
-            export_df2.to_csv(
-                os.path.abspath(f"{args.out_dir}/{seqid_group}_TEX_neg_{desc}.gff"),
-                index=False,
-                sep="\t",
-                header=False,
-            )
-            to_table_df(export_df1).to_csv(
-                os.path.abspath(f"{args.out_dir}/{seqid_group}_TEX_pos_{desc}.tsv"),
+            Helpers.expand_attributes_to_columns(export_tmp_df).to_excel(
+                excel_writer=writer,
+                sheet_name=seqid_group,
                 index=True,
-                sep="\t",
                 header=True,
                 na_rep="",
-            )
-            to_table_df(export_df2).to_csv(
-                os.path.abspath(f"{args.out_dir}/{seqid_group}_TEX_neg_{desc}.tsv"),
-                index=True,
-                sep="\t",
-                header=True,
-                na_rep="",
+                verbose=True
             )
     exit(0)
 
@@ -134,14 +127,6 @@ def _call_srnas(five_end_path, three_end_path, args):
         args.min_raw_height,
     )
     return srnas.srna_candidates
-
-
-def to_table_df(in_df):
-    df = in_df.copy()
-    df = Helpers.expand_attributes_to_columns(df)
-    df.sort_values(["seqid", "start", "end"], inplace=True)
-    df.reset_index(inplace=True, drop=True)
-    return df
 
 
 if __name__ == "__main__":

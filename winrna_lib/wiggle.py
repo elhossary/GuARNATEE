@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from Bio import Entrez
 
+
 class Wiggle:
     def __init__(self, file_path, chrom_sizes=None):
         np.set_printoptions(suppress=True)
@@ -139,6 +140,8 @@ class Wiggle:
             logger.warning(f"===> Error fetching metadata: {e.args}")
             return None
         seq_len = int(
-            str(esummary_record["Length"]).replace("IntegerElement(", "").split(",", maxsplit=1)[0]
+            str(esummary_record["Length"])
+            .replace("IntegerElement(", "")
+            .split(",", maxsplit=1)[0]
         )
         return seq_len
