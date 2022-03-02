@@ -97,8 +97,8 @@ class RNAClassifier:
         print("=> Classifying candidates")
         classes_df = self.anno_tbl_df.copy()
         classes_df["type"] = "sRNA_candidate"
-        classes_df["annotation_class"] = "NA"
-        classes_df["status"] = "NA"
+        classes_df["annotation_class"] = ""
+        classes_df["status"] = ""
 
         ref_df = self.re_classify_ref_gff()
         ref_pb = pybed.BedTool.from_dataframe(ref_df).sort()

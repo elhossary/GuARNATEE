@@ -106,14 +106,17 @@ def main():
                 sep="\t",
                 header=False,
             )
-            Helpers.expand_attributes_to_columns(export_tmp_df).to_excel(
-                excel_writer=writer,
-                sheet_name=seqid_group,
-                index=True,
-                header=True,
-                na_rep="",
-                verbose=True
-            )
+            excel_df = Helpers.expand_attributes_to_columns(export_tmp_df)
+            if "annotation_class" in excel_df.columns:
+                for anno_type in excel_df["annotation_class"].unique():
+                    excel_df[excel_df["annotation_class"] == anno_type].to_excel(
+                        excel_writer=writer,
+                        sheet_name=f"{seqid_group}_{anno_type}",
+                        index=True,
+                        header=True,
+                        na_rep="",
+                        verbose=True
+                    )
     exit(0)
 
 
