@@ -23,8 +23,9 @@ class Helpers:
                     if attr_str != "":
                         for k, v in Helpers.parse_attributes(attr_str).items():
                             df.at[i, k] = v
-                df.drop(["attributes"], inplace=True, axis=1)
             """
+            df.drop(["attributes"], inplace=True, axis=1)
+
         else:
             print("Warning: Attributes column not found!")
         return df
