@@ -387,12 +387,14 @@ class RNAClassifier:
         )
         gff_df.fillna("_", inplace=True)
         gff_df["GC_content"] = gff_df["RNA_sequence"].map(lambda x: round(SeqUtils.GC(x), 2))
-        slice_prefix = f"last_{slice_size}_nt_"
+        slice_prefix = f"{slice_size}_nt_"
         gff_df[f"{slice_prefix}RNA_sequence"] = gff_df["RNA_sequence"].str[-slice_size:]
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, "RNA_sequence", self.get_rna_structure_scores)
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"{slice_prefix}RNA_sequence", self.get_rna_structure_scores, slice_prefix)
         gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence"], inplace=True)
         self.classes = Helpers.warp_non_gff_columns(gff_df)
+
+
     def _get_poly_u_score(self, seq_str):
         ret_dict = {}
         seq_list = list(seq_str)
@@ -423,10 +425,10 @@ class RNAClassifier:
         fc.exp_params_rescale(mfe)
         # compute partition function
         (pp, pf) = fc.pf()
-        ret_dict["partition_function"] = pf
+        ret_dict["partition_func"] = pf
         # compute centroid structure
         (centroid_struct, dist) = fc.centroid()
-        ret_dict["centroid_structure_distance"] = dist
+        ret_dict["centroid_struct_dist"] = dist
         # compute free energy of centroid structure
         centroid_en = fc.eval_structure(centroid_struct)
         ret_dict["centroid_MFE"] = centroid_en
@@ -436,7 +438,7 @@ class RNAClassifier:
         # compute free energy of MEA structure
         MEA_en = fc.eval_structure(MEA_struct)
         ret_dict["MEA_MFE"] = MEA_en
-        ret_dict["ensemble_MFE_structure_frequency"] = fc.pr_structure(mfe_struct)
+        ret_dict["ensemble_MFE_struct_freq"] = fc.pr_structure(mfe_struct)
         ret_dict["ensemble_diversity"] = fc.mean_bp_distance()
 
         return ret_dict

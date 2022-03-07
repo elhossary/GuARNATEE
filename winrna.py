@@ -105,6 +105,7 @@ def main():
             sep="\t",
             header=False)
     export_df = Helpers.expand_attributes_to_columns(export_df)
+    rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
     for anno_type in export_df["annotation_class"].unique():
         type_df = export_df[export_df["annotation_class"] == anno_type]
         with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{anno_type}_candidates.xlsx"), engine="openpyxl") as writer:
@@ -113,6 +114,7 @@ def main():
                 export_tmp_df.reset_index(inplace=True, drop=True)
                 export_tmp_df.replace("", np.nan, inplace=True)
                 export_tmp_df.dropna(how='all', axis=1, inplace=True)
+                export_tmp_df.rename(columns=rename_cols, inplace=True)
                 export_tmp_df.to_excel(
                     excel_writer=writer,
                     sheet_name=f"{seqid_group}_{anno_type}",
