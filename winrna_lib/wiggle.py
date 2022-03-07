@@ -35,7 +35,7 @@ class Wiggle:
             )
             for content_header, content in tqdm(
                 all_contents.items(),
-                desc=f"=> Loading wiggle file: {os.path.basename(self.file_path)}", ncols=10
+                desc=f"=> Loading wiggle file: {os.path.basename(self.file_path)}", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'
             ):
                 current_wiggle_meta = self.parse_wiggle_header(
                     content_header, current_wiggle_meta
@@ -76,7 +76,7 @@ class Wiggle:
                 )
 
     def generate_1d_signal(self):
-        for k in tqdm(self.coverages.keys(), desc="==> Parsing wiggles:", ncols=10):
+        for k in tqdm(self.coverages.keys(), desc="==> Parsing wiggles:", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
             df1 = pd.DataFrame(np.arange(1, self.chrom_sizes[k] + 1), columns=["loc"])
             df2 = pd.DataFrame(self.coverages[k], columns=["loc", "score"])
             df2["loc"] = df2["loc"].astype(int)

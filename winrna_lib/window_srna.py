@@ -109,7 +109,7 @@ class WindowSRNA:
         ret_df = pd.DataFrame(columns=base_columns)
         start_df = start_bed.to_dataframe(names=base_columns)
         end_df = end_bed.to_dataframe(names=base_columns)
-        for row_id in tqdm(start_df.index, desc="==> Connecting 5' - 3' ends", ncols=10):
+        for row_id in tqdm(start_df.index, desc="==> Connecting 5' - 3' ends", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
             size_range = set(
                 range(
                     start_df.at[row_id, "start"] + min_len,
