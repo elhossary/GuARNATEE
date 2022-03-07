@@ -33,7 +33,6 @@ class RNAClassifier:
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
-        print(self.classes.head(20).to_string())
 
     def _drop_redundancies(self):
         df = Helpers.expand_attributes_to_columns(self.classes)

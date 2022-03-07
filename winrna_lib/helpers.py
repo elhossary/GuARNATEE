@@ -30,6 +30,7 @@ class Helpers:
 
     @staticmethod
     def warp_non_gff_columns(gff_df: pd.DataFrame, exclude_columns=None, no_join=False, keep_columns=False) -> pd.DataFrame:
+        gff_df = gff_df.copy()
         gff_df.reset_index(drop=True, inplace=True)
         if exclude_columns is None:
             exclude_columns = []
@@ -45,7 +46,7 @@ class Helpers:
         #    pd.Series(list(map(Helpers.attributes_dict_to_str, attr_dict_list)))
         #print(gff_df[gff_df["start"] == 883439].to_string())
         if not no_join:
-            gff_df['attributes'] = gff_df['attributes'].astype(str).str.cat(gff_df['extra_attributes'], sep=';')
+            gff_df['attributes'] = gff_df['attributes'] + ";" + gff_df['extra_attributes']
             non_gff_columns.append("extra_attributes")
         if not keep_columns:
             gff_df.drop(non_gff_columns, inplace=True, axis=1)
