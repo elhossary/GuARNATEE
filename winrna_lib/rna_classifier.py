@@ -41,7 +41,7 @@ class RNAClassifier:
         )
         drop_ids = []
         for seqid, strand, select_column in tqdm(
-            combs, desc="===> Cleaning redundancies"
+            combs, desc="===> Cleaning redundancies", ncols=10
         ):
             df_slice = df[(df["seqid"] == seqid) & (df["strand"] == strand)]
             select_keys = df_slice[select_column].unique().tolist()
