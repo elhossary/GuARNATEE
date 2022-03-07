@@ -1,3 +1,5 @@
+import numpy as np
+
 from winrna_lib.window_srna import WindowSRNA
 from winrna_lib.rna_classifier import RNAClassifier
 from winrna_lib.differential_classifier import DifferentialClassifier
@@ -36,13 +38,12 @@ def main():
         "--max_len", default=350, type=int, help="Maximum allowed annotation length"
     )
     parser.add_argument("--read_length", default=75, type=int, help="")
-    parser.add_argument("--threshold_factor", default=1, type=float, help="")
     parser.add_argument("--min_raw_height", default=10, type=float, help="")
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
 
     # load files
-    gff_df = GFF(gff_paths=args.gffs).gff_df
+    gff_obj = GFF(gff_paths=args.gffs)
     fastas = Fasta(fasta_paths=args.fastas)
     seqid_groups = fastas.organism_seqid_groups
     wig_info_df = pd.DataFrame(
@@ -83,8 +84,8 @@ def main():
         tmp_df2 = Helpers.get_gff_df(
             tmp_df2, anno_source="WinRNA", anno_type="candidate", new_id=True
         )
-        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df1, fastas).classes)
-        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_df, tmp_df2, fastas).classes)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
             {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
         ).score_similarity()
@@ -96,27 +97,30 @@ def main():
     export_df["source"] = "WinRNA"
 
     # Exports
-    with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/all_candidates.xlsx"), engine="openpyxl") as writer:
-        for seqid_group, seqids in seqid_groups.items():
-            export_tmp_df = export_df[export_df["seqid"].isin(seqids)]
-            export_tmp_df.reset_index(inplace=True, drop=True)
-            Helpers.warp_non_gff_columns(export_tmp_df).to_csv(
-                os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.gff"),
-                index=False,
-                sep="\t",
-                header=False,
-            )
-            excel_df = Helpers.expand_attributes_to_columns(export_tmp_df)
-            if "annotation_class" in excel_df.columns:
-                for anno_type in excel_df["annotation_class"].unique():
-                    excel_df[excel_df["annotation_class"] == anno_type].to_excel(
-                        excel_writer=writer,
-                        sheet_name=f"{seqid_group}_{anno_type}",
-                        index=True,
-                        header=True,
-                        na_rep="",
-                        verbose=True
-                    )
+    ## GFFs
+    for seqid_group, seqids in seqid_groups.items():
+        Helpers.warp_non_gff_columns(export_df[export_df["seqid"].isin(seqids)]).to_csv(
+            os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.gff"),
+            index=False,
+            sep="\t",
+            header=False)
+    export_df = Helpers.expand_attributes_to_columns(export_df)
+    for anno_type in export_df["annotation_class"].unique():
+        type_df = export_df[export_df["annotation_class"] == anno_type]
+        with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{anno_type}_candidates.xlsx"), engine="openpyxl") as writer:
+            for seqid_group, seqids in seqid_groups.items():
+                export_tmp_df = type_df[type_df["seqid"].isin(seqids)].copy()
+                export_tmp_df.reset_index(inplace=True, drop=True)
+                export_tmp_df.replace("", np.nan, inplace=True)
+                export_tmp_df.dropna(how='all', axis=1, inplace=True)
+                export_tmp_df.to_excel(
+                    excel_writer=writer,
+                    sheet_name=f"{seqid_group}_{anno_type}",
+                    index=True,
+                    header=True,
+                    na_rep="",
+                    verbose=True)
+
     exit(0)
 
 
@@ -126,7 +130,6 @@ def _call_srnas(five_end_path, three_end_path, args):
         args.min_len,
         args.max_len,
         args.read_length,
-        args.threshold_factor,
         args.min_raw_height,
     )
     return srnas.srna_candidates

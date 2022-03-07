@@ -14,7 +14,6 @@ class WindowPeaks:
         self,
         raw_signal: np.array,
         min_peak_distance: int,
-        threshold_factor: float,
         min_height,
         is_reversed,
         prefix="",
@@ -22,7 +21,6 @@ class WindowPeaks:
         self.raw_signal = raw_signal
         self.windows = self.get_slicing_indexes(self.raw_signal)
         self.min_peak_distance = min_peak_distance
-        self.threshold_factor = threshold_factor
         self.min_height = min_height
         self.is_reversed = is_reversed
         self.prefix = prefix
@@ -39,7 +37,7 @@ class WindowPeaks:
         for window in tqdm(self.windows, desc="==> Calling peaks: ", postfix=""):
             window_sig_slice = sig_deriv[window[0]: window[1]]
             window_peaks = self._call_peaks_in_slice(
-                window_sig_slice, self.threshold_factor, self.min_peak_distance
+                window_sig_slice, self.min_peak_distance
             )
 
             if window_peaks is None:
@@ -100,18 +98,27 @@ class WindowPeaks:
         ]
 
     @staticmethod
-    def _call_peaks_in_slice(signal_slice, threshold_factor, min_peak_distance=1):
+    def get_threshold(train_set, factor, sig_len, win_len=75):
+        threshold_func = lambda data, factor: (np.percentile(data, 75) + stats.iqr(data) * 1.5) * factor
+        thres = threshold_func(train_set, factor)
+        if train_set[train_set >= thres].size > sig_len / win_len:
+            factor += 0.1
+            return WindowPeaks.get_threshold(train_set, factor, sig_len, win_len)
+        else:
+            return thres
+
+    @staticmethod
+    def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=30):
         # Core calling method
-        threshold_func = lambda data, factor: (
-            np.percentile(data, 75) + stats.iqr(data)
-        ) * (1.5 * factor)
+        threshold_func = lambda data: (np.percentile(data, 75) + stats.iqr(data)) * 1.5
         # Call peaks
         threshold_train_set = np.abs(signal_slice[signal_slice != 0])
         if threshold_train_set.size == 0:
             return None
-        threshold = threshold_func(threshold_train_set, threshold_factor)
+        # threshold = WindowPeaks.get_threshold(threshold_train_set, 1, signal_slice.size)
+        threshold = threshold_func(threshold_train_set)
         peaks, peaks_props = signal.find_peaks(
-            signal_slice, height=(threshold, None), distance=30)
+            signal_slice, height=(threshold, None), distance=min_peak_distance)
         if peaks.size == 0:
             return None
 

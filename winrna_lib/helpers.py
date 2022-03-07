@@ -3,12 +3,10 @@ import typing
 import numpy as np
 import pandas as pd
 from Bio import SeqUtils
+from multiprocessing import Pool
 
 
 class Helpers:
-    def __init__(self):
-        pass
-
     @staticmethod
     def expand_attributes_to_columns(in_df) -> pd.DataFrame:
         df = in_df.copy()
@@ -31,40 +29,34 @@ class Helpers:
         return df
 
     @staticmethod
-    def warp_non_gff_columns(gff_df: pd.DataFrame, keep_columns=False) -> pd.DataFrame:
-        gff_df = gff_df.copy()
-        gff_columns = [
-            "seqid",
-            "source",
-            "type",
-            "start",
-            "end",
-            "score",
-            "strand",
-            "phase",
-            "attributes",
-        ]
-        non_gff_columns = [x for x in gff_df.columns.tolist() if x not in gff_columns]
+    def warp_non_gff_columns(gff_df: pd.DataFrame, exclude_columns=None, no_join=False, keep_columns=False) -> pd.DataFrame:
+        gff_df.reset_index(drop=True, inplace=True)
+        if exclude_columns is None:
+            exclude_columns = []
+        gff_columns = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
+        non_gff_columns = [x for x in gff_df.columns.tolist() if x not in gff_columns + exclude_columns]
         if len(non_gff_columns) == 0:
             return gff_df
+        #prohibited_values = ["", np.nan, np.NAN, "nan", None]
+        #attr_dict_list = gff_df.loc[:, non_gff_columns].to_dict('records')
         for i in gff_df.index:
-            extra_attr = [f"{col}={gff_df.at[i, col]}" for col in non_gff_columns if gff_df.at[i, col] not in ["", np.nan, np.NAN, "nan", None]]
-            extra_attr = [x for x in extra_attr if not x.endswith("=")]
-            #print(extra_attr)
-            gff_df.at[i, "extra_attributes"] = ";".join(extra_attr).strip(";")
-        if "attributes" in gff_df.columns.tolist():
-            gff_df["attributes"] = (
-                gff_df["attributes"] + ";" + gff_df["extra_attributes"]
-            )
+            gff_df.at[i, "extra_attributes"] = Helpers.attributes_dict_to_str({col: gff_df.at[i, col] for col in non_gff_columns})
+        #gff_df["extra_attributes"] = \
+        #    pd.Series(list(map(Helpers.attributes_dict_to_str, attr_dict_list)))
+        #print(gff_df[gff_df["start"] == 883439].to_string())
+        if not no_join:
+            gff_df['attributes'] = gff_df['attributes'].astype(str).str.cat(gff_df['extra_attributes'], sep=';')
             non_gff_columns.append("extra_attributes")
-        else:
-            gff_df.rename(columns={"extra_attributes": "attributes"}, inplace=True)
         if not keep_columns:
             gff_df.drop(non_gff_columns, inplace=True, axis=1)
             gff_df = gff_df.reindex(columns=gff_columns)
         gff_df["attributes"] = gff_df["attributes"].str.strip(to_strip=";")
-        gff_df["attributes"] = gff_df["attributes"].str.replace(";;", ";")
         return gff_df
+
+    @staticmethod
+    def attributes_dict_to_str(attr_dict):
+        prohibited_values = ["", None, "nan", np.nan]
+        return ";".join([f"{k}={v}" for k, v in attr_dict.items() if v not in prohibited_values])
 
     @staticmethod
     def get_gff_df(df, anno_source="", anno_type="", strand="", new_id=False):
@@ -170,12 +162,89 @@ class Helpers:
 
     @staticmethod
     def explode_dict_yielding_func_into_columns(df: pd.DataFrame, df_col: str, func: typing.Callable, column_prefix="") -> pd.DataFrame:
+        seq_lst = df[df_col].tolist()
+        df["TMP_COLUMN"] = pd.Series(list(Pool().map(func, seq_lst)))
+        return Helpers.explode_column_of_dicts(df, "TMP_COLUMN", column_prefix)
+
+    @staticmethod
+    def explode_column_of_dicts(df: pd.DataFrame, df_col: str, column_prefix="") -> pd.DataFrame:
         df.reset_index(inplace=True, drop=True)
-        df["TMP_COLUMN"] = df[df_col].map(lambda x: func(x))
-        tmp_df = df["TMP_COLUMN"].apply(pd.Series)
+        tmp_df = df[df_col].apply(pd.Series)
         tmp_df.fillna("", inplace=True)
         if column_prefix != "":
             tmp_df = tmp_df.add_prefix(column_prefix)
         df = pd.merge(left=df, right=tmp_df, right_index=True, left_index=True, how='left')
         df.drop(columns=["TMP_COLUMN"], inplace=True)
         return df
+
+    @staticmethod
+    def parse_attributes_into_dict(gff_df: pd.DataFrame, attr_col="attributes") -> pd.DataFrame:
+        gff_df[f"{attr_col}_dict"] = gff_df[attr_col].map(Helpers.parse_attributes_str)
+        return gff_df
+
+    @staticmethod
+    def add_type_as_prefix_to_attributes_keys(gff_df: pd.DataFrame, attr_col="attributes", type_col="type") -> pd.DataFrame:
+        gff_df.reset_index(inplace=True, drop=True)
+        gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
+        for i in gff_df.index:
+            attr_type = gff_df.at[i, type_col]
+            old_dict = gff_df.at[i, f"{attr_col}_dict"]
+            gff_df.at[i, f"{attr_col}_dict"] = {(f"{attr_type}_{k}" if attr_type.lower() not in k.lower() else k): v for k, v in old_dict.items()}
+        gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
+        gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
+        return gff_df
+
+    @staticmethod
+    def merge_same_intervals(gff_df: pd.DataFrame):
+        column_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
+        gff_df = Helpers.add_type_as_prefix_to_attributes_keys(gff_df)
+        essential_columns = ["seqid", "start", "end", "strand"]
+        gff_df = gff_df.groupby(essential_columns, as_index=False).agg({"source": list,
+                                                                        "type": list,
+                                                                        "phase": list,
+                                                                        "score": list,
+                                                                        "attributes": list})
+        for i in gff_df.index:
+            for column in ["source", "type", "phase", "score"]:
+                gff_df.at[i, column] = "|".join(set(gff_df.at[i, column]))
+            gff_df.at[i, "attributes"] = ";".join(set(gff_df.at[i, "attributes"]))
+        gff_df.reset_index(inplace=True, drop=True)
+        gff_df = gff_df.reindex(columns=column_names)
+        return gff_df
+
+    @staticmethod
+    def parse_attributes_str(attr_str):
+        if attr_str in ["", None]:
+            return {}
+        attr_pairs = [attr.split("=") for attr in attr_str.split(";") if attr != ""]
+        attr_dict = {}
+        for attr_pair in attr_pairs:
+            if len(attr_pair) != 2:
+                print(f"Warning: Skipping ambiguous key/value pair in GFF at: {attr_pairs}")
+                continue
+            if attr_pair[0] in attr_dict.keys():
+                if attr_pair[1] == attr_dict[attr_pair[0]]:
+                    continue
+                attr_dict[attr_pair[0]] += f"|{attr_pair[1]}"
+                continue
+            attr_dict[attr_pair[0]] = attr_pair[1]
+        return attr_dict
+
+    @staticmethod
+    def filter_attributes(gff_df: pd.DataFrame, filters: list, attr_col="attributes") -> pd.DataFrame:
+
+        gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
+        for i in gff_df.index:
+            gff_df.at[i, f"{attr_col}_dict"] = \
+                {k: v for k, v in gff_df.at[i, f"{attr_col}_dict"].items() if any(f.lower() in k.lower() for f in filters)}
+
+        gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
+        gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
+        return gff_df
+
+    @staticmethod
+    def rewrap_attributes_column(gff_df, attr_col="attributes") -> pd.DataFrame:
+        gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
+        gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
+        gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
+        return gff_df

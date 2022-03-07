@@ -50,14 +50,12 @@ class WindowSRNA:
         min_len: int,
         max_len: int,
         min_distance: int,
-        threshold_factor: float,
         min_height: float,
     ) -> None:
         """
         :param min_len: minimum length allowed for a small RNA candidate
         :param max_len: maximum length allowed for a small RNA candidate
         :param min_distance: minimum distance allowed between called peaks
-        :param threshold_factor: factor to multiple with the threshold
         :param min_height: minimum raw height filter
         :return: return nothing, directly saves to class variable
         """
@@ -66,7 +64,6 @@ class WindowSRNA:
             five_end_peaks_obj = WindowPeaks(
                 self.five_end_wiggle[seqid],
                 min_distance,
-                threshold_factor,
                 min_height,
                 bool(self.strand == "-"),
                 "SS",
@@ -75,7 +72,6 @@ class WindowSRNA:
             three_end_peaks_obj = WindowPeaks(
                 self.three_end_wiggle[seqid],
                 min_distance,
-                threshold_factor,
                 min_height,
                 bool(self.strand == "+"),
                 "TS",

@@ -1,4 +1,3 @@
-import sys
 import os
 import io
 from itertools import product
@@ -15,26 +14,16 @@ from winrna_lib.fasta import Fasta
 
 
 class RNAClassifier:
-    def __init__(self, gff_df, anno_tbl_df, fasta: Fasta):
-        self.gff_df = gff_df[gff_df["type"] != "region"].copy()
+    def __init__(self, gff_obj, anno_tbl_df, fasta: Fasta):
+        self.gff_df = gff_obj.gff_df[~gff_obj.gff_df["type"].isin(["region", "exon"])].copy()
         self.anno_tbl_df = anno_tbl_df
         self.fasta = fasta
-        self.gff_columns = [
-            "seqid",
-            "source",
-            "type",
-            "start",
-            "end",
-            "score",
-            "strand",
-            "phase",
-            "attributes",
-        ]
+        self.gff_columns = gff_obj.column_names
         self.seqids = set.intersection(set(self.gff_df["seqid"].unique().tolist()),
                                        set(self.fasta.fwd_seqs.keys()),
                                        set(self.anno_tbl_df["seqid"].unique().tolist()))
         self.anno_tbl_df = self.anno_tbl_df[self.anno_tbl_df["seqid"].isin(self.seqids)]
-        self.classes = pd.DataFrame
+        self.classes = pd.DataFrame()
         self.dispatch()  # run the classifier at init
 
     def dispatch(self):
@@ -42,9 +31,9 @@ class RNAClassifier:
         self.classify()
         self.get_intergenic_flanks()
         self.get_gff_sequences_features(is_rna=True)
-        #print(self.classes.head(20).to_string())
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        print(self.classes.head(20).to_string())
 
     def _drop_redundancies(self):
         df = Helpers.expand_attributes_to_columns(self.classes)
@@ -95,141 +84,143 @@ class RNAClassifier:
 
     def classify(self):
         print("=> Classifying candidates")
-        classes_df = self.anno_tbl_df.copy()
-        classes_df["type"] = "sRNA_candidate"
-        classes_df["annotation_class"] = ""
-        classes_df["status"] = ""
-
-        ref_df = self.re_classify_ref_gff()
-        ref_pb = pybed.BedTool.from_dataframe(ref_df).sort()
-        classes_pb = pybed.BedTool.from_dataframe(
-            Helpers.warp_non_gff_columns(classes_df)
+        candidates_df = Helpers.warp_non_gff_columns(self.anno_tbl_df)
+        candidates_df["type"] = "sRNA_candidate"
+        ref_df = Helpers.merge_same_intervals(self.gff_df)
+        attr_filters = ["biotype", "name", "locus_tag", "old_locus_tag"]
+        candidates_pb = pybed.BedTool.from_dataframe(
+            Helpers.warp_non_gff_columns(candidates_df)
         ).sort()
-        ref_columns = (
-            self.gff_columns
-            + [f"ref_{col}" for col in self.gff_columns]
-            + ["overlap_size"]
-        )
+        ref_pb = pybed.BedTool.from_dataframe(ref_df).sort()
+        ref_columns = [f"ref_{x}" for x in self.gff_columns]
+        intersect_columns = self.gff_columns + ref_columns + ["overlap_size"]
+        candidates_df = candidates_pb.intersect(ref_pb, wao=True, f=0.5).to_dataframe(names=intersect_columns)
+        candidates_df["overlap_size"] = candidates_df["overlap_size"].astype(int)
+        candidates_df.drop(columns=["ref_seqid", "ref_source", "ref_score", "ref_phase"], inplace=True)
 
-        classes_df = (
-            classes_pb.intersect(ref_pb, wao=True, f=0.5)
-            .to_dataframe(names=ref_columns)
-            .drop(columns=["ref_seqid", "ref_source", "ref_score", "ref_phase"])
-        )
-
-        ref_columns = [c for c in classes_df.columns if "ref_" in c]
+        # clean and prepare
+        substr_filter_func = \
+            lambda in_str, substrs, sep: \
+                f"{sep}".join([w for w in in_str.split(sep) if any(substr in w for substr in substrs)])
         for rc in ref_columns:
-            classes_df.loc[classes_df[rc] == ".", rc] = ""
-            #classes_df.loc[classes_df[rc] == -1, rc] = 0
+            if rc not in candidates_df.columns:
+                continue
+            candidates_df.loc[candidates_df[rc] == ".", rc] = ""
 
-        classes_df = classes_df.groupby(self.gff_columns + ["ref_strand"], as_index=False).agg({
-            "overlap_size": max, "ref_attributes": ";".join, "ref_type": "_".join, "ref_end": max, "ref_start": min})
-        classes_df.replace("ncRNA_ncRNA", "ncRNA", inplace=True)
-        #classes_df = classes_df.loc[classes_df.groupby(self.gff_columns).overlap_size.idxmax()]
-        for i in classes_df.index:
-            classes_df.at[i, "ref_attributes"] = Helpers.get_naming_attributes(classes_df.at[i, "ref_attributes"])
-        classes_df = classes_df.reindex(columns=self.gff_columns + [c for c in classes_df.columns if c not in self.gff_columns])
-        classes_df.loc[
-            classes_df["overlap_size"] == 0, ["annotation_class", "status"]
-        ] = ("intergenic", "novel")
-        classes_df.loc[
-            (classes_df["ref_type"] == "CDS")
-            & (classes_df["strand"] == classes_df["ref_strand"]),
-            ["annotation_class", "status"],
-        ] = ("ORF_int", "novel")
+        # get novel intergenic (no intersection or unannotated regions)
+        diff_df = candidates_df[candidates_df["overlap_size"] <= 0].copy()
+        candidates_df.drop(diff_df.index, inplace=True)
+        diff_df.drop(columns=[c for c in diff_df.columns if "ref_" in c] + ["overlap_size"], inplace=True)
+        diff_df["annotation_class"] = "intergenic"
+        diff_df["detection_status"] = "novel"
+        self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(diff_df)], ignore_index=True)
+        ####################
+        # update ref types with single values for intersections
+        candidates_df["ref_type_tmp"] = candidates_df["ref_type"].apply(substr_filter_func, args=(["RNA", "CDS"], "|")).replace("", np.nan)
+        candidates_df.loc[candidates_df["ref_attributes"].str.contains("gene_biotype=protein_coding"), ["ref_type_tmp"]] = "CDS"
+        candidates_df["ref_type"].update(candidates_df["ref_type_tmp"])
+        candidates_df.drop(columns=["ref_type_tmp"], inplace=True)
+        # filter attributes to get values of interest
+        candidates_df = Helpers.filter_attributes(candidates_df, attr_filters, "ref_attributes")
+        # split based on strand
+        sense_intersect_df = candidates_df[candidates_df["strand"] == candidates_df["ref_strand"]]
+        antisense_intersect_df = candidates_df[candidates_df["strand"] != candidates_df["ref_strand"]]
+        del candidates_df
+        ####################
+        sense_intersect_df = sense_intersect_df.apply(self.add_overlap_info, args=[False], axis=1, result_type='expand')
+        antisense_intersect_df = antisense_intersect_df.apply(self.add_overlap_info, args=[True], axis=1, result_type='expand')
+        sense_intersect_df.drop(columns=["ref_start", "ref_end"], inplace=True)
+        antisense_intersect_df.drop(columns=["ref_start", "ref_end"], inplace=True)
+        sense_intersect_df = self.merge_same_interval_and_type(sense_intersect_df)
+        antisense_intersect_df = self.merge_same_interval_and_type(antisense_intersect_df)
+        ####################
+        antisense_intersect_df = pd.merge(left=antisense_intersect_df, right=sense_intersect_df, on=self.gff_columns, how='left', suffixes=("", "_tmp"), indicator=True)
+        tmp_cols = [col for col in antisense_intersect_df.columns if "_tmp" in col]
+        antisense_intersect_df = antisense_intersect_df[antisense_intersect_df["_merge"] == "left_only"]
+        antisense_intersect_df.drop(columns=["_merge"], inplace=True)
+        antisense_intersect_df["attributes"] = antisense_intersect_df["attributes"] + ";" + antisense_intersect_df["ref_attributes"]
+        antisense_intersect_df = Helpers.rewrap_attributes_column(antisense_intersect_df)
+        antisense_intersect_df["annotation_class"] = "antisense_to_" + antisense_intersect_df["ref_type"] + "_region"
+        antisense_intersect_df["detection_status"] = "novel"
+        ref_cols = [c for c in antisense_intersect_df.columns if "ref_" in c]
+        antisense_intersect_df.drop(columns=tmp_cols + ["upstream_fragment_ratio", "downstream_fragment_ratio"] + ref_cols, inplace=True)
+        self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(antisense_intersect_df)], ignore_index=True)
+        ####################
+        cds_sense_intersect_df = sense_intersect_df[sense_intersect_df["ref_type"] == "CDS"].copy()
+        sense_intersect_df.drop(cds_sense_intersect_df.index, inplace=True)
+        sense_intersect_df = pd.merge(left=cds_sense_intersect_df, right=sense_intersect_df, on=self.gff_columns, how='outer', suffixes=("_cds", "_other"), indicator=True)
+        known_orf_int_df = sense_intersect_df[sense_intersect_df["_merge"] == "both"].copy()
+        novel_orf_int_df = sense_intersect_df[sense_intersect_df["_merge"] == "left_only"].copy()
+        known_other_df = sense_intersect_df[sense_intersect_df["_merge"] == "right_only"].copy()
+        del sense_intersect_df
+        novel_orf_int_df.drop(columns=[c for c in novel_orf_int_df.columns if "_other" in c] + ["_merge"], inplace=True)
+        known_other_df.drop(columns=[c for c in known_other_df.columns if "_cds" in c] + ["_merge"], inplace=True)
+        novel_orf_int_df.rename(columns={c: c.replace("_cds", "") for c in novel_orf_int_df.columns}, inplace=True)
+        known_other_df.rename(columns={c: c.replace("_other", "") for c in known_other_df.columns}, inplace=True)
+        ###########################
+        novel_orf_int_df["attributes"] = novel_orf_int_df["attributes"] + ";" + novel_orf_int_df["ref_attributes"]
+        ref_cols = [c for c in novel_orf_int_df.columns if "ref_" in c]
+        novel_orf_int_df.loc[novel_orf_int_df["overlap_fragment_ratio"].astype(float) <= 75, ["annotation_class", "detection_status"]] = ("ORF_int", "novel")
+        novel_orf_int_df.loc[novel_orf_int_df["overlap_fragment_ratio"].astype(float) > 75, ["annotation_class", "detection_status"]] = ("sORF", "known")
+        novel_orf_int_df.drop(columns=ref_cols, inplace=True)
+        novel_orf_int_df = Helpers.rewrap_attributes_column(novel_orf_int_df)
+        self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(novel_orf_int_df)], ignore_index=True)
+        ###########################
+        known_other_df["attributes"] = known_other_df["attributes"] + ";" + known_other_df["ref_attributes"]
+        ref_cols = [c for c in known_other_df.columns if "ref_" in c]
+        known_other_df["annotation_class"] = known_other_df["ref_type"]
+        known_other_df["detection_status"] = "known"
+        known_other_df.drop(columns=["upstream_fragment_ratio", "downstream_fragment_ratio"] + ref_cols, inplace=True)
+        known_other_df = Helpers.rewrap_attributes_column(known_other_df)
+        known_other_df = Helpers.warp_non_gff_columns(known_other_df)
+        self.classes = pd.concat([self.classes, known_other_df], ignore_index=True)
+        ###########################
+        known_orf_int_df.rename(columns={c: c.replace("_cds", "") for c in known_orf_int_df.columns}, inplace=True)
+        known_orf_int_df.rename(columns={c: f'ORF_int_{c.replace("_other", "")}' for c in known_orf_int_df.columns if "_other" in c}, inplace=True)
+        known_orf_int_df = Helpers.add_type_as_prefix_to_attributes_keys(known_orf_int_df, "ORF_int_ref_attributes", "ORF_int_ref_type")
+        known_orf_int_df["ref_attributes"] = known_orf_int_df["ref_attributes"] + ";" + known_orf_int_df["ORF_int_ref_attributes"]
+        known_orf_int_df["ref_attributes"] = known_orf_int_df["ref_attributes"].str.strip(";")
+        known_orf_int_df["attributes"] = known_orf_int_df["attributes"] + ";" + known_orf_int_df["ref_attributes"]
+        known_orf_int_df = Helpers.rewrap_attributes_column(known_orf_int_df)
+        known_orf_int_df.loc[known_orf_int_df["overlap_fragment_ratio"].astype(float) <= 75, ["annotation_class", "detection_status"]] = ("ORF_int", "known")
+        known_orf_int_df.loc[known_orf_int_df["overlap_fragment_ratio"].astype(float) > 75, ["annotation_class", "detection_status"]] = ("sORF", "known")
+        known_orf_int_df.drop(columns=[c for c in known_orf_int_df.columns if "ref_" in c] + ["ORF_int_upstream_fragment_ratio", "ORF_int_downstream_fragment_ratio", "_merge"], inplace=True)
+        self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(known_orf_int_df)], ignore_index=True)
+        ###########################
+        self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        self.classes.reset_index(drop=True, inplace=True)
 
-        classes_df.loc[
-            (classes_df["ref_type"] == "CDS")
-            & (classes_df["strand"] != classes_df["ref_strand"]),
-            ["annotation_class", "status"]
-        ] = ("antisense_to_CDS_region", "novel")
+    def merge_same_interval_and_type(self, in_df: pd.DataFrame) -> pd.DataFrame:
+        # in_df = in_df.loc[in_df.groupby(self.gff_columns + ["ref_strand"])['overlap_size'].idxmax()]
+        merge_non_gff_columns = ["ref_strand", "ref_type"]
+        join_types = {"ref_attributes": ";".join, "overlap_size": "|".join, "overlap_fragment_ratio": max,
+                      "upstream_fragment_ratio": "|".join, "downstream_fragment_ratio": "|".join}
+        for col in join_types.keys():
+            if col == "overlap_fragment_ratio" or col not in in_df.columns:
+                continue
+            in_df[col] = in_df[col].astype(str)
+        for ref_type in in_df["ref_type"].unique():
+            tmp_df = in_df[in_df["ref_type"] == ref_type].copy()
+            in_df.drop(tmp_df.index, inplace=True)
+            tmp_df = tmp_df.groupby(self.gff_columns + merge_non_gff_columns, as_index=False)\
+                .agg({col: join_types[col] for col in in_df.columns if col not in self.gff_columns + merge_non_gff_columns})
+            in_df = pd.concat([in_df, tmp_df], ignore_index=True)
+        in_df = Helpers.rewrap_attributes_column(in_df, "ref_attributes")
+        return in_df
 
-        classes_df.loc[
-            (classes_df["ref_type"].str.contains("ncRNA"))
-            & (classes_df["strand"] == classes_df["ref_strand"]),
-            ["annotation_class", "status"]
-        ] = ("ncRNA", "known")
-        classes_df.loc[
-            (classes_df["ref_type"].str.contains("ncRNA"))
-            & (classes_df["strand"] != classes_df["ref_strand"]),
-            ["annotation_class", "status"]
-        ] = ("antisense_to_ncRNA_region", "novel")
-
-        classes_df.loc[
-            (classes_df["ref_type"].str.contains("ORF_int"))
-            & (classes_df["strand"] == classes_df["ref_strand"]),
-            ["annotation_class", "status", "ref_type"]
-        ] = ("ORF_int", "known", "CDS")
-
-        classes_df = classes_df.apply(self.add_overlap_info, axis=1)
-        classes_df.loc[
-            (classes_df["ref_type"] == "CDS")
-            & (classes_df["annotation_class"] == "ORF_int")
-            & (classes_df["overlap_fragment_ratio"] >= 75),
-            ["annotation_class", "status"]
-        ] = ("sORF", "known")
-
-        classes_df["annotation_class"].fillna("bbNA", inplace=True)
-        classes_df["status"].fillna("NA", inplace=True)
-        classes_df["attributes"] = classes_df["attributes"].str.cat(classes_df["gene_info"].fillna(""), sep=";")
-        classes_df.drop(
-            columns=["gene_info", "ref_attributes", "overlap_size", "ref_type", "ref_end", "ref_start", "ref_strand"],
-            inplace=True
-        )
-        classes_df.fillna("", inplace=True)
-        classes_df.reset_index(inplace=True, drop=True)
-        classes_df = Helpers.warp_non_gff_columns(classes_df)
-        classes_df.sort_values(["seqid", "start", "end"], inplace=True)
-        self.classes = classes_df
-
-    def re_classify_ref_gff(self):
-        cds_df = self.gff_df[self.gff_df["type"] == "CDS"].copy()
-        ncrna_df = self.gff_df[self.gff_df["type"] == "ncRNA"].copy()
-        cds_pb = pybed.BedTool.from_dataframe(cds_df).sort()
-        ncrna_pb = pybed.BedTool.from_dataframe(ncrna_df).sort()
-        orf_int_df = ncrna_pb.intersect(cds_pb, wa=True, s=True, f=0.50).to_dataframe(
-            names=self.gff_columns
-        )
-        orf_int_df["type"] = "ORF_int"
-        diff_cols = [
-            "seqid",
-            "source",
-            "start",
-            "end",
-            "score",
-            "strand",
-            "phase",
-            "attributes",
-        ]
-        ncrna_df = pd.merge(
-            left=ncrna_df,
-            right=orf_int_df,
-            on=diff_cols,
-            how="left",
-            suffixes=("", "_new"),
-        )
-        ncrna_df["type"] = ncrna_df["type_new"]
-        ncrna_df["type"].fillna("ncRNA", inplace=True)
-        ncrna_df.drop(columns=["type_new"], inplace=True)
-        return pd.concat([cds_df, ncrna_df], ignore_index=True)
-
-    def add_overlap_info(self, row: pd.Series) -> pd.Series:
+    def add_overlap_info(self, row: pd.Series, intersection_only=False) -> pd.Series:
         if row["overlap_size"] == 0:
             return row
-
-        overlap_info = self._get_overlap_position(
-            (row["start"], row["end"]),
-            (row["ref_start"], row["ref_end"]),
-        )
+        overlap_info = self._get_overlap_position((row["start"], row["end"]), (row["ref_start"], row["ref_end"]))
         row["overlap_fragment_ratio"] = overlap_info["intersect_size_perc"]
+        if intersection_only:
+            return row
         if row["strand"] == "-":
             overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                 overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
         row["upstream_fragment_ratio"] = overlap_info["diff_before_size_perc"]
         row["downstream_fragment_ratio"] = overlap_info["diff_after_size_perc"]
-        row["gene_info"] = Helpers.get_naming_attributes(
-            row["ref_attributes"], prefix=f"{row['ref_type']}_"
-        )
+        #row["gene_info"] = Helpers.get_naming_attributes(row["ref_attributes"], prefix=f"{row['ref_type']}_")
         return row
 
     @staticmethod
@@ -403,7 +394,6 @@ class RNAClassifier:
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"{slice_prefix}RNA_sequence", self.get_rna_structure_scores, slice_prefix)
         gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence"], inplace=True)
         self.classes = Helpers.warp_non_gff_columns(gff_df)
-
     def _get_poly_u_score(self, seq_str):
         ret_dict = {}
         seq_list = list(seq_str)
