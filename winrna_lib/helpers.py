@@ -246,7 +246,7 @@ class Helpers:
     @staticmethod
     def rewrap_attributes_column(gff_df, attr_col="attributes") -> pd.DataFrame:
         gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
-        for i in gff_df:
+        for i in gff_df.index:
             gff_df.at[i, attr_col] = Helpers.attributes_dict_to_str(gff_df.at[i, f"{attr_col}_dict"])
         gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
         return gff_df
