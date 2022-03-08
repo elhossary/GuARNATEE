@@ -45,7 +45,7 @@ class Helpers:
         #gff_df["extra_attributes"] = \
         #    pd.Series(list(map(Helpers.attributes_dict_to_str, attr_dict_list)))
         #print(gff_df[gff_df["start"] == 883439].to_string())
-        if not no_join:
+        if not no_join and "extra_attributes" in gff_df.columns:
             gff_df['attributes'] = gff_df['attributes'] + ";" + gff_df['extra_attributes']
             non_gff_columns.append("extra_attributes")
         if not keep_columns:
@@ -190,8 +190,8 @@ class Helpers:
         for i in gff_df.index:
             attr_type = gff_df.at[i, type_col]
             old_dict = gff_df.at[i, f"{attr_col}_dict"]
-            gff_df.at[i, f"{attr_col}_dict"] = {(f"{attr_type}_{k}" if attr_type.lower() not in k.lower() else k): v for k, v in old_dict.items()}
-        gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
+            new_dict = {(f"{attr_type}_{k}" if attr_type.lower() not in k.lower() else k): v for k, v in old_dict.items()}
+            gff_df.at[i, attr_col] = Helpers.attributes_dict_to_str(new_dict)
         gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
         return gff_df
 
@@ -246,6 +246,7 @@ class Helpers:
     @staticmethod
     def rewrap_attributes_column(gff_df, attr_col="attributes") -> pd.DataFrame:
         gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
-        gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
+        for i in gff_df:
+            gff_df.at[i, attr_col] = Helpers.attributes_dict_to_str(gff_df.at[i, f"{attr_col}_dict"])
         gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
         return gff_df

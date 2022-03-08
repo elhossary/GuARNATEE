@@ -83,7 +83,8 @@ class RNAClassifier:
 
     def classify(self):
         print("=> Classifying candidates")
-        candidates_df = Helpers.warp_non_gff_columns(self.anno_tbl_df)
+        anno_tbl_df = Helpers.warp_non_gff_columns(self.anno_tbl_df)
+        candidates_df = anno_tbl_df.copy()
         candidates_df["type"] = "sRNA_candidate"
         ref_df = Helpers.merge_same_intervals(self.gff_df)
         attr_filters = ["biotype", "name", "locus_tag", "old_locus_tag"]
@@ -186,8 +187,16 @@ class RNAClassifier:
         known_orf_int_df.drop(columns=[c for c in known_orf_int_df.columns if "ref_" in c] + ["ORF_int_upstream_fragment_ratio", "ORF_int_downstream_fragment_ratio", "_merge"], inplace=True)
         self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(known_orf_int_df)], ignore_index=True)
         ###########################
+        na_df = pd.merge(left=anno_tbl_df, right=self.classes, how='left', indicator=True, on=["seqid", "start", "end", "strand"], suffixes=("", "_classes"))
+        na_df = na_df[na_df["_merge"] == "left_only"]
+        na_df.drop(columns=[c for c in na_df.columns if "_classes" in c] + ["_merge"], inplace=True)
+        na_df["annotation_class"] = "NA"
+        na_df["detection_status"] = "novel"
+        self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(na_df)], ignore_index=True)
+        ###########
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
         self.classes.reset_index(drop=True, inplace=True)
+
 
     def merge_same_interval_and_type(self, in_df: pd.DataFrame) -> pd.DataFrame:
         # in_df = in_df.loc[in_df.groupby(self.gff_columns + ["ref_strand"])['overlap_size'].idxmax()]

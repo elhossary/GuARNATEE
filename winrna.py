@@ -106,18 +106,31 @@ def main():
             header=False)
     export_df = Helpers.expand_attributes_to_columns(export_df)
     rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
-    for anno_type in export_df["annotation_class"].unique():
-        type_df = export_df[export_df["annotation_class"] == anno_type]
-        with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{anno_type}_candidates.xlsx"), engine="openpyxl") as writer:
+
+    classes_groups = {"UTR": [], "CDS": [], "others": []}
+    for cls in export_df["annotation_class"].unique():
+        if "ncRNA" in cls or "intergenic" in cls:
+            classes_groups["UTR"] += [cls]
+        elif "ORF" in cls or "CDS" in cls:
+            classes_groups["CDS"] += [cls]
+        else:
+            classes_groups["others"] += [cls]
+
+    for classes_group, classes in classes_groups.items():
+        type_df = export_df[export_df["annotation_class"].isin(classes)]
+        with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{classes_group}_candidates.xlsx"), engine="openpyxl") \
+                as writer:
             for seqid_group, seqids in seqid_groups.items():
                 export_tmp_df = type_df[type_df["seqid"].isin(seqids)].copy()
+                if export_tmp_df.empty:
+                    continue
                 export_tmp_df.reset_index(inplace=True, drop=True)
                 export_tmp_df.replace("", np.nan, inplace=True)
                 export_tmp_df.dropna(how='all', axis=1, inplace=True)
                 export_tmp_df.rename(columns=rename_cols, inplace=True)
                 export_tmp_df.to_excel(
                     excel_writer=writer,
-                    sheet_name=f"{seqid_group}_{anno_type}",
+                    sheet_name=f"{seqid_group}",
                     index=True,
                     header=True,
                     na_rep="",
