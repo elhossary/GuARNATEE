@@ -57,9 +57,8 @@ class DifferentialClassifier:
         bed_score_df["overlap_percentage"].replace(
             to_replace=0.0, value=np.nan, inplace=True
         )
-        bed_score_df["overlaps_count"].replace(
-            to_replace=0.0, value=np.nan, inplace=True
-        )
+        bed_score_df["overlaps_count"] = bed_score_df["overlaps_count"].astype(int)
+        # bed_score_df["overlaps_count"].replace(to_replace=0.0, value=np.nan, inplace=True)
         bed_score_df.rename(
             columns={
                 "overlap_percentage": f"{df2_lib_name}_overlap_percentage",
