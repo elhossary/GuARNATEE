@@ -98,25 +98,38 @@ class WindowPeaks:
         ]
 
     @staticmethod
-    def get_threshold(train_set, factor, sig_len, win_len=75):
+    def get_threshold_by_recursive_iqr(train_set, factor, sig_len, win_len=75):
         threshold_func = lambda data, factor: (np.percentile(data, 75) + stats.iqr(data) * 1.5) * factor
         thres = threshold_func(train_set, factor)
         if train_set[train_set >= thres].size > sig_len / win_len:
             factor += 0.1
-            return WindowPeaks.get_threshold(train_set, factor, sig_len, win_len)
+            return WindowPeaks.get_threshold_by_recursive_IQR(train_set, factor, sig_len, win_len)
         else:
             return thres
 
     @staticmethod
-    def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=30):
+    def get_threshold_by_zscore(train_set, min_score: float) -> np.array or None:
+        sorted_train_set = np.sort(train_set)
+        diff_train_set = np.diff(sorted_train_set)
+        zscores = stats.zscore(diff_train_set)
+        filt_mask = np.argwhere(zscores >= min_score)
+        significant_values = sorted_train_set[filt_mask]
+        if significant_values.shape[0] > 0:
+            return np.min(significant_values)
+
+    @staticmethod
+    def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=10):
         # Core calling method
         threshold_func = lambda data: (np.percentile(data, 75) + stats.iqr(data)) * 1.5
         # Call peaks
         threshold_train_set = np.abs(signal_slice[signal_slice != 0])
         if threshold_train_set.size == 0:
             return None
-        # threshold = WindowPeaks.get_threshold(threshold_train_set, 1, signal_slice.size)
-        threshold = threshold_func(threshold_train_set)
+        # threshold = WindowPeaks.get_threshold_by_recursive_iqr(threshold_train_set, 1, signal_slice.size)
+        # threshold = threshold_func(threshold_train_set)
+        threshold = WindowPeaks.get_threshold_by_zscore(threshold_train_set, 3)
+        if threshold in [0, None]:
+            return None
         peaks, peaks_props = signal.find_peaks(
             signal_slice, height=(threshold, None), distance=min_peak_distance)
         if peaks.size == 0:
@@ -126,6 +139,7 @@ class WindowPeaks:
         #peaks, peaks_props = signal.find_peaks(
         #    signal_slice, height=(threshold, None), distance=min_peak_distance
         #)
+
         return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):

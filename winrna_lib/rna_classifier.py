@@ -22,7 +22,7 @@ class RNAClassifier:
         self.seqids = set.intersection(set(self.gff_df["seqid"].unique().tolist()),
                                        set(self.fasta.fwd_seqs.keys()),
                                        set(self.anno_tbl_df["seqid"].unique().tolist()))
-        self.anno_tbl_df = self.anno_tbl_df[self.anno_tbl_df["seqid"].isin(self.seqids)]
+        self.anno_tbl_df = self.anno_tbl_df[self.anno_tbl_df["seqid"].isin(self.seqids)]  # .iloc[:100, :]
         self.classes = pd.DataFrame()
         self.dispatch()  # run the classifier at init
 
@@ -33,6 +33,7 @@ class RNAClassifier:
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        #print(self.classes.head(100).to_string())
 
     def _drop_redundancies(self):
         df = Helpers.expand_attributes_to_columns(self.classes)
@@ -127,6 +128,7 @@ class RNAClassifier:
         antisense_intersect_df = candidates_df[candidates_df["strand"] != candidates_df["ref_strand"]]
         del candidates_df
         ####################
+        # Slice the dataframe based on overlaps candidate vs reference strands
         sense_intersect_df = sense_intersect_df.apply(self.add_overlap_info, args=[False], axis=1, result_type='expand')
         antisense_intersect_df = antisense_intersect_df.apply(self.add_overlap_info, args=[True], axis=1, result_type='expand')
         sense_intersect_df.drop(columns=["ref_start", "ref_end"], inplace=True)
@@ -134,6 +136,7 @@ class RNAClassifier:
         sense_intersect_df = self.merge_same_interval_and_type(sense_intersect_df)
         antisense_intersect_df = self.merge_same_interval_and_type(antisense_intersect_df)
         ####################
+        # Overlaps in opposite strands of reference leads to novel antisense to region classification
         antisense_intersect_df = pd.merge(left=antisense_intersect_df, right=sense_intersect_df, on=self.gff_columns, how='left', suffixes=("", "_tmp"), indicator=True)
         tmp_cols = [col for col in antisense_intersect_df.columns if "_tmp" in col]
         antisense_intersect_df = antisense_intersect_df[antisense_intersect_df["_merge"] == "left_only"]
@@ -146,8 +149,11 @@ class RNAClassifier:
         antisense_intersect_df.drop(columns=tmp_cols + ["upstream_fragment_ratio", "downstream_fragment_ratio"] + ref_cols, inplace=True)
         self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(antisense_intersect_df)], ignore_index=True)
         ####################
+        # Get CDS overlaps on the sane strand
         cds_sense_intersect_df = sense_intersect_df[sense_intersect_df["ref_type"] == "CDS"].copy()
+        # leave non CDS overlaps
         sense_intersect_df.drop(cds_sense_intersect_df.index, inplace=True)
+        # The following merge to differentiate known ORF internals from novel and known non CDS overlaps
         sense_intersect_df = pd.merge(left=cds_sense_intersect_df, right=sense_intersect_df, on=self.gff_columns, how='outer', suffixes=("_cds", "_other"), indicator=True)
         known_orf_int_df = sense_intersect_df[sense_intersect_df["_merge"] == "both"].copy()
         novel_orf_int_df = sense_intersect_df[sense_intersect_df["_merge"] == "left_only"].copy()
@@ -158,6 +164,7 @@ class RNAClassifier:
         novel_orf_int_df.rename(columns={c: c.replace("_cds", "") for c in novel_orf_int_df.columns}, inplace=True)
         known_other_df.rename(columns={c: c.replace("_other", "") for c in known_other_df.columns}, inplace=True)
         ###########################
+        # Assign classifications to novel CDS overlaps
         novel_orf_int_df["attributes"] = novel_orf_int_df["attributes"] + ";" + novel_orf_int_df["ref_attributes"]
         ref_cols = [c for c in novel_orf_int_df.columns if "ref_" in c]
         novel_orf_int_df.loc[novel_orf_int_df["overlap_fragment_ratio"].astype(float) <= 75, ["annotation_class", "detection_status"]] = ("ORF_int", "novel")
@@ -166,6 +173,7 @@ class RNAClassifier:
         novel_orf_int_df = Helpers.rewrap_attributes_column(novel_orf_int_df)
         self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(novel_orf_int_df)], ignore_index=True)
         ###########################
+        #
         known_other_df["attributes"] = known_other_df["attributes"] + ";" + known_other_df["ref_attributes"]
         ref_cols = [c for c in known_other_df.columns if "ref_" in c]
         known_other_df["annotation_class"] = known_other_df["ref_type"]
@@ -175,6 +183,7 @@ class RNAClassifier:
         known_other_df = Helpers.warp_non_gff_columns(known_other_df)
         self.classes = pd.concat([self.classes, known_other_df], ignore_index=True)
         ###########################
+        #
         known_orf_int_df.rename(columns={c: c.replace("_cds", "") for c in known_orf_int_df.columns}, inplace=True)
         known_orf_int_df.rename(columns={c: f'ORF_int_{c.replace("_other", "")}' for c in known_orf_int_df.columns if "_other" in c}, inplace=True)
         known_orf_int_df = Helpers.add_type_as_prefix_to_attributes_keys(known_orf_int_df, "ORF_int_ref_attributes", "ORF_int_ref_type")
@@ -182,8 +191,8 @@ class RNAClassifier:
         known_orf_int_df["ref_attributes"] = known_orf_int_df["ref_attributes"].str.strip(";")
         known_orf_int_df["attributes"] = known_orf_int_df["attributes"] + ";" + known_orf_int_df["ref_attributes"]
         known_orf_int_df = Helpers.rewrap_attributes_column(known_orf_int_df)
-        known_orf_int_df.loc[known_orf_int_df["overlap_fragment_ratio"].astype(float) <= 75, ["annotation_class", "detection_status"]] = ("ORF_int", "known")
-        known_orf_int_df.loc[known_orf_int_df["overlap_fragment_ratio"].astype(float) > 75, ["annotation_class", "detection_status"]] = ("sORF", "known")
+        known_orf_int_df["annotation_class"] = "ORF_int"
+        known_orf_int_df["detection_status"] = "known"
         known_orf_int_df.drop(columns=[c for c in known_orf_int_df.columns if "ref_" in c] + ["ORF_int_upstream_fragment_ratio", "ORF_int_downstream_fragment_ratio", "_merge"], inplace=True)
         self.classes = pd.concat([self.classes, Helpers.warp_non_gff_columns(known_orf_int_df)], ignore_index=True)
         ###########################
@@ -396,13 +405,15 @@ class RNAClassifier:
         )
         gff_df.fillna("_", inplace=True)
         gff_df["GC_content"] = gff_df["RNA_sequence"].map(lambda x: round(SeqUtils.GC(x), 2))
+
         slice_prefix = f"{slice_size}_nt_"
         gff_df[f"{slice_prefix}RNA_sequence"] = gff_df["RNA_sequence"].str[-slice_size:]
+        gff_df[f"10nt_RNA_sequence"] = gff_df["RNA_sequence"].str[-10:]
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, "RNA_sequence", self.get_rna_structure_scores)
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"{slice_prefix}RNA_sequence", self.get_rna_structure_scores, slice_prefix)
-        gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence"], inplace=True)
+        gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"10nt_RNA_sequence", self._get_poly_u_score)
+        gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence", "10nt_RNA_sequence"], inplace=True)
         self.classes = Helpers.warp_non_gff_columns(gff_df)
-
 
     def _get_poly_u_score(self, seq_str):
         ret_dict = {}
@@ -410,23 +421,27 @@ class RNAClassifier:
         u_indices = np.array([i for i, a in enumerate(seq_list, 1) if a == "U"])
         u_indices.sort()
         if u_indices.size == 0:
+            ret_dict["poly_u_score"] = 0
             return ret_dict
         #u_indices_groups = [list(group) for group in consecutive_groups(u_indices)]
+        """
         max_interrupt = 3
         u_stretches = np.split(u_indices, np.where(np.diff(u_indices) >= max_interrupt)[0] + 1)
         u_stretches_content = [len(s) for s in u_stretches]
         u_stretches_quality = [round(len(s)/(max(s) - min(s) + 1), 2) for s in u_stretches]
-        print(u_stretches)
-        print(u_stretches_content)
-        print(u_stretches_quality)
-
-
+        """
+        ret_dict["poly_u_score"] = len(u_indices) / len(seq_list)
         return ret_dict
 
     def get_rna_structure_scores(self, seq_str) -> dict:
         ret_dict = {}
         # create fold_compound data structure (required for all subsequently applied  algorithms)
         fc = RNA.fold_compound(seq_str)
+        #min_pairs = 1
+        #max_pairs = int(len(seq_str) / 2)
+        #print(fc.(structure=fc))
+        #print(fc.E_ext_hp_loop(min_pairs, max_pairs))
+
         # compute MFE and MFE structure
         (mfe_struct, mfe) = fc.mfe()
         ret_dict["MFE"] = mfe
