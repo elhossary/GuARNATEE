@@ -84,6 +84,8 @@ def main():
         tmp_df2 = Helpers.get_gff_df(
             tmp_df2, anno_source="WinRNA", anno_type="candidate", new_id=True
         )
+        tmp_df1["condition"] = desc
+        tmp_df2["condition"] = desc
         tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas).classes)
         tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
