@@ -104,7 +104,7 @@ def main():
     export_df.sort_values(["seqid", "start", "end"], inplace=True)
     export_df.reset_index(inplace=True, drop=True)
     export_df["source"] = "WinRNA"
-    print(f"Total {export_df.shape[0]} candidates in {clusters} in unique regions to be exported")
+    print(f"Total {export_df.shape[0]} candidates in {clusters} unique regions to be exported")
     # Exports
     # ==> GFFs
     for seqid_group, seqids in seqid_groups.items():
