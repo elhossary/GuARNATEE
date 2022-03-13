@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import logging as logger
@@ -10,6 +11,9 @@ from Bio import Entrez
 class Wiggle:
     def __init__(self, file_path, chrom_sizes=None):
         np.set_printoptions(suppress=True)
+        if not os.path.exists(os.path.abspath(file_path)):
+            print(f"Error: {file_path} does not exist!")
+            sys.exit(1)
         self.file_path = file_path
         self.track_type = ""
         self.track_name = ""
@@ -76,15 +80,17 @@ class Wiggle:
                 )
 
     def generate_1d_signal(self):
-        for k in tqdm(self.coverages.keys(), desc="==> Parsing wiggles:", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
-            df1 = pd.DataFrame(np.arange(1, self.chrom_sizes[k] + 1), columns=["loc"])
-            df2 = pd.DataFrame(self.coverages[k], columns=["loc", "score"])
-            df2["loc"] = df2["loc"].astype(int)
-            self.signals[k] = np.abs(
-                pd.merge(df1, df2, right_on="loc", left_on="loc", how="outer")
-                .fillna(0.0)["score"]
-                .to_numpy()
-            )
+        with tqdm(self.coverages.keys(), bar_format='{desc} |{bar:20}| {percentage:3.0f}%') as tqdm_progress:
+            for k in tqdm_progress:
+                tqdm_progress.set_description_str(f"==> Parsing wiggle SeqID '{k}'")
+                df1 = pd.DataFrame(np.arange(1, self.chrom_sizes[k] + 1), columns=["loc"])
+                df2 = pd.DataFrame(self.coverages[k], columns=["loc", "score"])
+                df2["loc"] = df2["loc"].astype(int)
+                self.signals[k] = np.abs(
+                    pd.merge(df1, df2, right_on="loc", left_on="loc", how="outer")
+                    .fillna(0.0)["score"]
+                    .to_numpy()
+                )
 
     @staticmethod
     def _parse_wiggle_str(in_str):

@@ -1,9 +1,8 @@
 import glob
+import sys
 import os.path
-
 import numpy as np
 import pandas as pd
-from winrna_lib.helpers import Helpers
 
 
 class GFF:
@@ -30,6 +29,9 @@ class GFF:
         parsed_paths = []
         for item in self.gff_paths:
             for sub_item in glob.glob(item):
+                if not os.path.exists(os.path.abspath(sub_item)):
+                    print(f"Error: {sub_item} File does not exist!")
+                    sys.exit()
                 parsed_paths.append(os.path.abspath(sub_item))
         for gff_path in parsed_paths:
             gff_parsed = pd.read_csv(
@@ -42,5 +44,5 @@ class GFF:
             [self.regions, self.gff_df[self.gff_df["type"] == "region"]]
         )
         self.gff_df.drop(self.regions.index, inplace=True, axis=0)
-        print(f"==> Parsed {len(parsed_paths)} GFF files")
+        print(f"==> Parsed {self.gff_df.shape[0]} from {len(parsed_paths)} GFF files")
 

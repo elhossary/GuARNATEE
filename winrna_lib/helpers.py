@@ -77,10 +77,10 @@ class Helpers:
         # Checking inputs
         if not set(essential_columns).issubset(df_columns):
             print("Error: Missing essential columns")
-            sys.exit(1)
+            sys.sys.exit(1)
         if "strand" not in df_columns and strand not in ["+", "-"]:
             print("Error: Missing strand information")
-            sys.exit(1)
+            sys.sys.exit(1)
         # Adding missing columns
         if "source" not in df_columns:
             df["source"] = anno_source
@@ -233,12 +233,11 @@ class Helpers:
 
     @staticmethod
     def filter_attributes(gff_df: pd.DataFrame, filters: list, attr_col="attributes") -> pd.DataFrame:
-
         gff_df = Helpers.parse_attributes_into_dict(gff_df, attr_col)
         for i in gff_df.index:
             gff_df.at[i, f"{attr_col}_dict"] = \
-                {k: v for k, v in gff_df.at[i, f"{attr_col}_dict"].items() if any(f.lower() in k.lower() for f in filters)}
-
+                {k: v for k, v in gff_df.at[i, f"{attr_col}_dict"].items() if
+                 any(f.lower() in k.lower() for f in filters)}
         gff_df[attr_col] = gff_df[f"{attr_col}_dict"].apply(Helpers.attributes_dict_to_str)
         gff_df.drop(columns=[f"{attr_col}_dict"], inplace=True)
         return gff_df

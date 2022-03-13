@@ -1,5 +1,5 @@
+import sys
 import numpy as np
-
 from winrna_lib.window_srna import WindowSRNA
 from winrna_lib.rna_classifier import RNAClassifier
 from winrna_lib.differential_classifier import DifferentialClassifier
@@ -10,6 +10,7 @@ import argparse
 import pandas as pd
 import os
 from winrna_lib.fasta import Fasta
+import pybedtools as pybed
 
 
 def main():
@@ -54,6 +55,7 @@ def main():
         wig_info_df["condition"] + "_rep_" + wig_info_df["replicate"]
     )
     export_df = pd.DataFrame()
+
     for desc in wig_info_df["file_desc"].unique().tolist():
         tmp_df1 = pd.DataFrame()
         tmp_df2 = pd.DataFrame()
@@ -64,7 +66,7 @@ def main():
             ].loc[:, ["file_path", "treatment"]]
             if working_wigs.shape[0] not in [3]:
                 print("Error: non-uniformed wiggles passed")
-                exit(1)
+                sys.exit(1)
             working_pathes = dict(
                 zip(working_wigs["treatment"], working_wigs["file_path"])
             )
@@ -94,30 +96,56 @@ def main():
         tmp_df1["replicate"] = desc
         tmp_df2["replicate"] = desc
         export_df = pd.concat([export_df, tmp_df1, tmp_df2], ignore_index=True)
+    export_df = Helpers.warp_non_gff_columns(export_df)
+    export_pb = pybed.BedTool.from_dataframe(export_df).sort().cluster(s=True, d=0)
+    export_df = export_pb.to_dataframe(names=gff_obj.column_names + ["cluster_id"])
+    clusters = export_df["cluster_id"].unique().size
+    export_df = Helpers.warp_non_gff_columns(export_df)
     export_df.sort_values(["seqid", "start", "end"], inplace=True)
     export_df.reset_index(inplace=True, drop=True)
     export_df["source"] = "WinRNA"
-
+    print(f"Total {export_df.shape[0]} candidates in {clusters} in unique regions to be exported")
     # Exports
-    ## GFFs
+    # ==> GFFs
     for seqid_group, seqids in seqid_groups.items():
-        Helpers.warp_non_gff_columns(export_df[export_df["seqid"].isin(seqids)]).to_csv(
+        export_df[export_df["seqid"].isin(seqids)].to_csv(
             os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.gff"),
             index=False,
             sep="\t",
             header=False)
+    # ==> Excel
     export_df = Helpers.expand_attributes_to_columns(export_df)
     rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
 
-    classes_groups = {"UTR": [], "CDS": [], "others": []}
+    classes_groups = {"intergenic": [], "ORF_int": [], "others": []}
     for cls in export_df["annotation_class"].unique():
-        if "ncRNA" in cls or "intergenic" in cls:
-            classes_groups["UTR"] += [cls]
-        elif "ORF" in cls or "CDS" in cls:
-            classes_groups["CDS"] += [cls]
+        if ("cross" in cls and "ncRNA" in cls) or "antisense_to" in cls:
+            classes_groups["others"] += [cls]
+        elif "ncRNA" in cls or "intergenic" in cls:
+            classes_groups["intergenic"] += [cls]
+        elif "ORF_int" in cls:
+            classes_groups["ORF_int"] += [cls]
         else:
             classes_groups["others"] += [cls]
-
+    for seqid_group, seqids in seqid_groups.items():
+        with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.xlsx"), engine="openpyxl") \
+                as writer:
+            for classes_group, classes in classes_groups.items():
+                seqid_type_df = export_df[(export_df["seqid"].isin(seqids)) & (export_df["annotation_class"].isin(classes))].copy()
+                if seqid_type_df.empty:
+                    continue
+                seqid_type_df.reset_index(inplace=True, drop=True)
+                seqid_type_df.replace("", np.nan, inplace=True)
+                seqid_type_df.dropna(how='all', axis=1, inplace=True)
+                seqid_type_df.rename(columns=rename_cols, inplace=True)
+                seqid_type_df.to_excel(
+                    excel_writer=writer,
+                    sheet_name=f"{classes_group}",
+                    index=True,
+                    header=True,
+                    na_rep="",
+                    verbose=True)
+    """
     for classes_group, classes in classes_groups.items():
         type_df = export_df[export_df["annotation_class"].isin(classes)]
         with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{classes_group}_candidates.xlsx"), engine="openpyxl") \
@@ -137,8 +165,8 @@ def main():
                     header=True,
                     na_rep="",
                     verbose=True)
-
-    exit(0)
+    """
+    sys.exit(0)
 
 
 def _call_srnas(five_end_path, three_end_path, args):

@@ -1,6 +1,7 @@
 import glob
 import io
 import os
+import sys
 import pandas as pd
 import pybedtools as pybed
 from more_itertools import consecutive_groups
@@ -22,6 +23,9 @@ class Fasta:
         parsed_paths = []
         for item in self.fasta_paths:
             for sub_item in glob.glob(item):
+                if not os.path.exists(os.path.abspath(sub_item)):
+                    print(f"Error: {sub_item} File does not exist!")
+                    sys.exit(1)
                 parsed_paths.append(os.path.abspath(sub_item))
         for fasta_path in parsed_paths:
             parse_tmp = SeqIO.parse(os.path.abspath(fasta_path), "fasta")
@@ -45,4 +49,4 @@ class Fasta:
             [f">{k}\n{v}" for k, v in self.fwd_seqs.items()]
         )
 
-        print(f"==> Parsed {len(parsed_paths)} Fasta files")
+        print(f"==> Parsed {len(self.fwd_seqs)} from {len(parsed_paths)} Fasta files")
