@@ -216,8 +216,8 @@ class RNAClassifier:
                 if multi_intersect_df.at[i, "strand"] == "-":
                     overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                         overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
-                multi_intersect_df.at[i, f"{ref_type}_upstream_fragment_ratio"] = overlap_info["diff_before_size_perc"]
-                multi_intersect_df.at[i, f"{ref_type}_downstream_fragment_ratio"] = overlap_info["diff_after_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}upstream_fragment_ratio"] = overlap_info["diff_before_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}downstream_fragment_ratio"] = overlap_info["diff_after_size_perc"]
         multi_intersect_df.drop(columns=ref_cols + ["overlap_size"], inplace=True)
         multi_intersect_df.fillna("", inplace=True)
         multi_intersect_df = Helpers.rewrap_attributes_column(multi_intersect_df)
