@@ -131,7 +131,8 @@ def main():
         with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.xlsx"), engine="openpyxl") \
                 as writer:
             for classes_group, classes in classes_groups.items():
-                seqid_type_df = export_df[(export_df["seqid"].isin(seqids)) & (export_df["annotation_class"].isin(classes))].copy()
+                seqid_type_df = export_df[(export_df["seqid"].isin(seqids)) &
+                                          (export_df["annotation_class"].isin(classes))].copy()
                 if seqid_type_df.empty:
                     continue
                 seqid_type_df.reset_index(inplace=True, drop=True)

@@ -34,7 +34,8 @@ class WindowPeaks:
         )
         all_peaks = []
 
-        for window in tqdm(self.windows, desc="==> Calling peaks: ", postfix="", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
+        for window in tqdm(self.windows, desc="==> Calling peaks: ",
+                           postfix="", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
             window_sig_slice = sig_deriv[window[0]: window[1]]
             window_peaks = self._call_peaks_in_slice(
                 window_sig_slice, self.min_peak_distance

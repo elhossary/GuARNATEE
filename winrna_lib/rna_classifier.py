@@ -162,8 +162,14 @@ class RNAClassifier:
         del antisense_single_df
         ##########################################
         single_intersect_df = single_intersect_df.apply(self.add_overlap_info, args=[False], axis=1, result_type='expand')
-        single_intersect_df.loc[(single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] > 75), "attributes"] += ";annotation_class=sORF;detection_status=known"
-        single_intersect_df.loc[(single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] <= 75), "attributes"] += ";annotation_class=ORF_int;detection_status=novel"
+        sorf_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] > 75)
+        orf_int_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] <= 75)
+        single_intersect_df.loc[sorf_mask, "attributes"] += ";annotation_class=sORF;detection_status=known"
+        single_intersect_df.loc[orf_int_mask, "attributes"] += ";annotation_class=ORF_int;detection_status=novel"
+        single_intersect_df.loc[sorf_mask, "attributes"] = \
+            single_intersect_df.loc[sorf_mask, "attributes"] + ";" + single_intersect_df.loc[sorf_mask, "ref_attributes"]
+        single_intersect_df.loc[orf_int_mask, "attributes"] = \
+            single_intersect_df.loc[orf_int_mask, "attributes"] + ";" + single_intersect_df.loc[orf_int_mask, "ref_attributes"]
         tmp_df = single_intersect_df[single_intersect_df["ref_type"] != "CDS"].copy()
         tmp_df["attributes"] = tmp_df["attributes"]\
                                + ";annotation_class=" \
@@ -203,7 +209,8 @@ class RNAClassifier:
                 start = multi_intersect_df.at[i, "start"]
                 end = multi_intersect_df.at[i, "end"]
                 overlap_info = self._get_overlap_position((start, end), (ref_start, ref_end))
-                multi_intersect_df.at[i, f"{ref_type}_overlap_fragment_ratio"] = overlap_info["intersect_size_perc"]
+                rename_ref = "" if ref_type == "CDS" else f"{ref_type}_"
+                multi_intersect_df.at[i, f"{rename_ref}overlap_fragment_ratio"] = overlap_info["intersect_size_perc"]
                 if ref_type != "CDS":
                     continue
                 if multi_intersect_df.at[i, "strand"] == "-":
@@ -328,9 +335,7 @@ class RNAClassifier:
 
     def get_intergenic_flanks(self):
         ref_gff_pb = pybed.BedTool.from_dataframe(self.gff_df[self.gff_df["type"] == "gene"]).sort()
-        intergenic_pb = pybed.BedTool.from_dataframe(self.classes[(self.classes["attributes"].str.contains("annotation_class=intergenic")) |
-                                                                  (self.classes["attributes"].str.contains("annotation_class=ncRNA")) |
-                                                                  (self.classes["attributes"].str.contains("antisense_to_ncRNA_region"))]).sort()
+        intergenic_pb = pybed.BedTool.from_dataframe(self.classes[self.classes["attributes"].str.contains("annotation_class=intergenic")]).sort()
         d_columns = self.gff_columns + [f"downstream_flank_{c}" for c in self.gff_columns] + ["downstream_flank_distance"]
         u_columns = self.gff_columns + [f"upstream_flank_{c}" for c in self.gff_columns] + ["upstream_flank_distance"]
         d_genes_df = intergenic_pb.closest(ref_gff_pb, D="a", io=True, iu=True).to_dataframe(names=d_columns)
