@@ -15,6 +15,7 @@ class WindowPeaks:
         raw_signal: np.array,
         min_peak_distance: int,
         min_height,
+        min_step_factor,
         is_reversed,
         prefix="",
     ):
@@ -22,6 +23,7 @@ class WindowPeaks:
         self.windows = self.get_slicing_indexes(self.raw_signal)
         self.min_peak_distance = min_peak_distance
         self.min_height = min_height
+        self.min_step_factor = min_step_factor
         self.is_reversed = is_reversed
         self.prefix = prefix
         self.peaks_arr = self.call_signal_peaks()
@@ -55,16 +57,17 @@ class WindowPeaks:
         else:
             all_peaks[:, 0] += 1
         raw_heights = [self.raw_signal[x] for x in all_peaks[:, 0].astype(int)]
-        mean_step_before = np.array([np.mean(self.raw_signal[x - 4 : x - 1]) for x in all_peaks[:, 0].astype(int)])
-        mean_step_after = np.array([np.mean(self.raw_signal[x + 1 : x + 4]) for x in all_peaks[:, 0].astype(int)])
+        mean_step_before = np.array([np.mean(self.raw_signal[x - 3: x]) for x in all_peaks[:, 0].astype(int)])
+        mean_step_after = np.array([np.mean(self.raw_signal[x + 1: x + 4]) for x in all_peaks[:, 0].astype(int)])
+        #step_factor = (mean_step_before / mean_step_after if self.is_reversed else mean_step_after / mean_step_before)
         step_factor = (mean_step_before / mean_step_after if self.is_reversed else mean_step_after / mean_step_before)
         # fold_change = np.abs(np.log2(mean_step_after / mean_step_before))\
         #    if self.is_reversed else \
         #    np.abs(np.log2(mean_step_before / mean_step_after))
 
         # plateau_height calculated as the average coverage for 30nt of peak height ignored if it contains zeros
-        plateau_cov = np.array([self.raw_signal[x - 29 : x] if self.is_reversed else self.raw_signal[x : x + 29] for x in all_peaks[:, 0].astype(int)])
-        plateau_cov_mask = np.array([np.all(pc) for pc in plateau_cov])
+        plateau_cov = np.array([self.raw_signal[x - 29 : x] if self.is_reversed else self.raw_signal[x : x + 30] for x in all_peaks[:, 0].astype(int)])
+
         mean_plateau_height = np.array([np.round(np.mean(pc), 2) for pc in plateau_cov])
         # np.round(fold_change, 2),
         all_peaks = np.stack(
@@ -79,8 +82,10 @@ class WindowPeaks:
             ),
             axis=-1,
         )
-        all_peaks = all_peaks[plateau_cov_mask]  # filter interrupted signals
-        all_peaks = all_peaks[all_peaks[:, 2] >= self.min_height]  # filter by minimum height
+        plateau_cov_filter__mask = np.array([np.all(pc) for pc in plateau_cov]) # filter interrupted signals
+        raw_heights_filter_mask = all_peaks[:, 2] >= self.min_height
+        step_factor_filter_mask = all_peaks[:, 5] >= self.min_step_factor
+        all_peaks = all_peaks[plateau_cov_filter__mask & raw_heights_filter_mask & step_factor_filter_mask]  # apply filters
         return all_peaks
 
     @staticmethod

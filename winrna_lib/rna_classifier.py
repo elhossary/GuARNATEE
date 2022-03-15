@@ -241,49 +241,31 @@ class RNAClassifier:
         return row
 
     @staticmethod
-    def _get_overlap_position(partial: tuple, full: tuple) -> dict:
-        partial_set = set(range(partial[0], partial[1] + 1, 1))
-        full_set = set(range(full[0], full[1] + 1, 1))
-        full_size = len(full_set)
-        diff = sorted(full_set.difference(partial_set))
-        ret_dict = {
-            "intersect_size": 0,
-            "diff_before_size": full_size,
-            "diff_after_size": 0,
-            "intersect_size_perc": 0,
-            "diff_before_size_perc": 100,
-            "diff_after_size_perc": 0
-        }
-        if not diff:
+    def _get_overlap_position(A: tuple, B: tuple) -> dict:
+        ret_dict = {"intersect_size_perc": 0, "diff_before_size_perc": 0, "diff_after_size_perc": 0}
+        A_range = set(range(A[0], A[1] + 1, 1))
+        B_range = set(range(B[0], B[1] + 1, 1))
+        intersect = A_range.intersection(B_range)
+        if not intersect:
             return ret_dict
-        intersect = sorted(partial_set.intersection(full_set))
-        cga = [list(cg) for cg in consecutive_groups(diff)]  # MUST be a list of 2 lists
-        cga_len = len(cga)
-        diff_before = []
-        diff_after = []
-        if cga_len == 0:
+        intersect_len = len(intersect)
+        ret_dict[f"intersect_size_perc"] = round(intersect_len / len(B_range) * 100)
+        sym_diff_cg = [set(cg) for cg in consecutive_groups(sorted(A_range.symmetric_difference(B_range)))]
+        if len(sym_diff_cg) == 0:
             return ret_dict
-        elif cga_len == 1:  # Special case
-            if max(cga[0]) < min(partial):
-                diff_before = cga[0]
-            if min(cga[0]) > max(partial):
-                diff_after = cga[0]
-        elif cga_len == 2:  # this is the expected case
-            diff_before = cga[0]
-            diff_after = cga[1]
-        else:
-            print("Fatal error")
-            sys.exit(1)
-
-        ret_dict = {
-            "intersect_size": len(intersect),
-            "diff_before_size": len(diff_before),
-            "diff_after_size": len(diff_after),
-            "intersect_size_perc": round(len(intersect) / full_size * 100, 1),
-            "diff_before_size_perc": round(len(diff_before) / full_size * 100, 1),
-            "diff_after_size_perc": round(len(diff_after) / full_size * 100, 1)
-        }
-
+        if len(sym_diff_cg) > 2:
+            print("Fatal Error!")
+            sys.exit()
+        for cg_id, cg in enumerate(sym_diff_cg):
+            if max(cg) < min(intersect):
+                pos = "before"
+            elif min(cg) > max(intersect):
+                pos = "after"
+            else:
+                pos = "NA"
+            ret_dict[f"diff_{pos}_size_perc"] = round(len(sym_diff_cg[cg_id]) / len(B_range) * 100, 2)
+            if cg.issubset(A_range):
+                ret_dict[f"diff_{pos}_size_perc"] *= -1
         return ret_dict
 
     def prefilter_candidates(self):

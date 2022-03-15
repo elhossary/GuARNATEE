@@ -40,6 +40,7 @@ def main():
     )
     parser.add_argument("--read_length", default=75, type=int, help="")
     parser.add_argument("--min_raw_height", default=10, type=float, help="")
+    parser.add_argument("--min_step_factor", default=1.5, type=float, help="")
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
 
@@ -177,6 +178,7 @@ def _call_srnas(five_end_path, three_end_path, args):
         args.max_len,
         args.read_length,
         args.min_raw_height,
+        args.min_step_factor
     )
     return srnas.srna_candidates
 

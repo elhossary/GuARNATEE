@@ -51,12 +51,14 @@ class WindowSRNA:
         max_len: int,
         min_distance: int,
         min_height: float,
+        min_step_factor: float,
     ) -> None:
         """
         :param min_len: minimum length allowed for a small RNA candidate
         :param max_len: maximum length allowed for a small RNA candidate
         :param min_distance: minimum distance allowed between called peaks
         :param min_height: minimum raw height filter
+        :param min_step_factor: minimum step factor filter
         :return: return nothing, directly saves to class variable
         """
         for seqid in self.seqids:
@@ -65,6 +67,7 @@ class WindowSRNA:
                 self.five_end_wiggle[seqid],
                 min_distance,
                 min_height,
+                min_step_factor,
                 bool(self.strand == "-"),
                 "SS",
             )
@@ -73,6 +76,7 @@ class WindowSRNA:
                 self.three_end_wiggle[seqid],
                 min_distance,
                 min_height,
+                min_step_factor,
                 bool(self.strand == "+"),
                 "TS",
             )

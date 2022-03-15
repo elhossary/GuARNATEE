@@ -207,7 +207,7 @@ class Helpers:
                                                                         "attributes": list})
         for i in gff_df.index:
             for column in ["source", "type", "phase", "score"]:
-                gff_df.at[i, column] = "|".join(set(gff_df.at[i, column]))
+                gff_df.at[i, column] = "|".join([str(x) for x in set(gff_df.at[i, column])])
             gff_df.at[i, "attributes"] = ";".join(set(gff_df.at[i, "attributes"]))
         gff_df.reset_index(inplace=True, drop=True)
         gff_df = gff_df.reindex(columns=column_names)
