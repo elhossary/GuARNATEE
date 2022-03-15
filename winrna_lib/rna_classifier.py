@@ -242,9 +242,9 @@ class RNAClassifier:
 
     @staticmethod
     def _get_overlap_position(A: tuple, B: tuple) -> dict:
-        ret_dict = {"intersect_size_perc": 0, "diff_before_size_perc": 0, "diff_after_size_perc": 0}
-        A_range = set(range(A[0], A[1] + 1, 1))
-        B_range = set(range(B[0], B[1] + 1, 1))
+        ret_dict = {"intersect_size_perc": 0.0, "diff_before_size_perc": 0.0, "diff_after_size_perc": 0.0}
+        A_range = set(range(int(A[0]), int(A[1]) + 1, 1))
+        B_range = set(range(int(B[0]), int(B[1]) + 1, 1))
         intersect = A_range.intersection(B_range)
         if not intersect:
             return ret_dict
@@ -262,7 +262,8 @@ class RNAClassifier:
             elif min(cg) > max(intersect):
                 pos = "after"
             else:
-                pos = "NA"
+                print("Fatal Error!")
+                sys.exit()
             ret_dict[f"diff_{pos}_size_perc"] = round(len(sym_diff_cg[cg_id]) / len(B_range) * 100, 2)
             if cg.issubset(A_range):
                 ret_dict[f"diff_{pos}_size_perc"] *= -1

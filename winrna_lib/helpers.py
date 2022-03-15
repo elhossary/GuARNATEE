@@ -143,12 +143,10 @@ class Helpers:
                 print(f"Warning: Skipping ambiguous key/value pair in GFF at: {attr_str}")
                 continue
             k, v = attr_pair_lst[0], attr_pair_lst[1]
-            if v in attr_dict.values():
-                continue
             if k.lower() in attr_dict.keys():
-                if attr_dict[k.lower()] == v:
+                if v in attr_dict[k.lower()]:
                     continue
-                attr_dict[k.lower()] += "," + v
+                attr_dict[k.lower()] += f"|{v}"
             else:
                 attr_dict[k.lower()] = v
         return attr_dict
