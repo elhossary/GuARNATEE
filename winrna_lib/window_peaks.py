@@ -66,7 +66,10 @@ class WindowPeaks:
         #    np.abs(np.log2(mean_step_before / mean_step_after))
 
         # plateau_height calculated as the average coverage for 30nt of peak height ignored if it contains zeros
-        plateau_cov = np.array([self.raw_signal[x - 29 : x] if self.is_reversed else self.raw_signal[x : x + 30] for x in all_peaks[:, 0].astype(int)])
+        plateau_width = 12  # the optimum value is the minimum mapping length
+        plateau_cov = np.array([self.raw_signal[x - plateau_width -1 : x] if self.is_reversed
+                                else self.raw_signal[x : x + plateau_width]
+                                for x in all_peaks[:, 0].astype(int)])
 
         mean_plateau_height = np.array([np.round(np.mean(pc), 2) for pc in plateau_cov])
         # np.round(fold_change, 2),

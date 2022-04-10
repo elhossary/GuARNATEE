@@ -56,7 +56,7 @@ def main():
         wig_info_df["condition"] + "_rep_" + wig_info_df["replicate"]
     )
     export_df = pd.DataFrame()
-
+    stats_df = pd.DataFrame()
     for desc in wig_info_df["file_desc"].unique().tolist():
         tmp_df1 = pd.DataFrame()
         tmp_df2 = pd.DataFrame()
@@ -71,16 +71,24 @@ def main():
             working_pathes = dict(
                 zip(working_wigs["treatment"], working_wigs["file_path"])
             )
-            treated_srnas_df = _call_srnas(
+            treated_srnas_df, treated_stats_df = _call_srnas(
                 working_pathes["TEX_pos"], working_pathes["term"], args
             )
+            treated_stats_df["file_desc"] = desc
+            treated_stats_df["TSS_lib_type"] = "treated"
+            treated_stats_df["strand"] = strand
             treated_srnas_df["strand"] = strand_sign
-            control_srnas_df = _call_srnas(
+            control_srnas_df, control_stats_df = _call_srnas(
                 working_pathes["TEX_neg"], working_pathes["term"], args
             )
+            control_stats_df["file_desc"] = desc
+            control_stats_df["TSS_lib_type"] = "control"
+            control_stats_df["strand"] = strand
             control_srnas_df["strand"] = strand_sign
             tmp_df1 = pd.concat([tmp_df1, treated_srnas_df], ignore_index=True)
             tmp_df2 = pd.concat([tmp_df2, control_srnas_df], ignore_index=True)
+            stats_df = pd.concat([stats_df, treated_stats_df, control_stats_df], ignore_index=True)
+
         tmp_df1 = Helpers.get_gff_df(
             tmp_df1, anno_source="WinRNA", anno_type="candidate", new_id=True
         )
@@ -114,7 +122,19 @@ def main():
             index=False,
             sep="\t",
             header=False)
+
+    for i in stats_df.index:
+        for k, v in seqid_groups.items():
+            if stats_df.at[i, "seqid"] in v:
+                stats_df.at[i, "Organism"] = k
+    stats_df = stats_df.groupby(["Organism", "file_desc", "TSS_lib_type"]).agg({"TSS_lib_windows_count": "sum",
+                                                                                "TSS_lib_peaks_count": "sum",
+                                                                                "TTS_lib_windows_count": "sum",
+                                                                                "TTS_lib_peaks_count": "sum",
+                                                                                "peaks_connections_count": "sum"})
+    stats_df.to_csv(os.path.abspath(f"{args.out_dir}/stats.tsv"), sep='\t', index=False)
     # ==> Excel
+
     export_df = Helpers.expand_attributes_to_columns(export_df)
     rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
 
@@ -146,28 +166,8 @@ def main():
                     index=True,
                     header=True,
                     na_rep="",
-                    verbose=True)
-    """
-    for classes_group, classes in classes_groups.items():
-        type_df = export_df[export_df["annotation_class"].isin(classes)]
-        with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{classes_group}_candidates.xlsx"), engine="openpyxl") \
-                as writer:
-            for seqid_group, seqids in seqid_groups.items():
-                export_tmp_df = type_df[type_df["seqid"].isin(seqids)].copy()
-                if export_tmp_df.empty:
-                    continue
-                export_tmp_df.reset_index(inplace=True, drop=True)
-                export_tmp_df.replace("", np.nan, inplace=True)
-                export_tmp_df.dropna(how='all', axis=1, inplace=True)
-                export_tmp_df.rename(columns=rename_cols, inplace=True)
-                export_tmp_df.to_excel(
-                    excel_writer=writer,
-                    sheet_name=f"{seqid_group}",
-                    index=True,
-                    header=True,
-                    na_rep="",
-                    verbose=True)
-    """
+                    verbose=True,
+                    index_label="index")
     sys.exit(0)
 
 
@@ -180,7 +180,7 @@ def _call_srnas(five_end_path, three_end_path, args):
         args.min_raw_height,
         args.min_step_factor
     )
-    return srnas.srna_candidates
+    return srnas.srna_candidates, srnas.log_df
 
 
 if __name__ == "__main__":

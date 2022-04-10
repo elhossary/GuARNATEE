@@ -44,6 +44,11 @@ class WindowSRNA:
             "phase",
             "attributes",
         ]
+        self.log_df = pd.DataFrame(
+            columns=["seqid",
+                     "TSS_lib_windows_count", "TSS_lib_peaks_count",
+                     "TTS_lib_windows_count", "TTS_lib_peaks_count",
+                     "peaks_connections_count"])
 
     def call_window_srna(
         self,
@@ -80,6 +85,7 @@ class WindowSRNA:
                 bool(self.strand == "+"),
                 "TS",
             )
+
             five_end_peaks_str = five_end_peaks_obj.get_bed_str(seqid)
             three_end_peaks_str = three_end_peaks_obj.get_bed_str(seqid)
             if five_end_peaks_str is None or three_end_peaks_str is None:
@@ -99,6 +105,13 @@ class WindowSRNA:
                     three_end_peaks_bed, five_end_peaks_bed, min_len, max_len
                 )
             )
+            tmp_dict = {"seqid": seqid,
+                        "TSS_lib_windows_count": len(five_end_peaks_obj.windows),
+                        "TSS_lib_peaks_count": five_end_peaks_obj.peaks_arr.size,
+                        "TTS_lib_windows_count": len(three_end_peaks_obj.windows),
+                        "TTS_lib_peaks_count": three_end_peaks_obj.peaks_arr.size,
+                        "peaks_connections_count": connected_peaks_df.shape[0]}
+            self.log_df = pd.concat([self.log_df, pd.DataFrame([tmp_dict], columns=tmp_dict.keys())], ignore_index=True)
             self.srna_candidates = pd.concat(
                 [self.srna_candidates, connected_peaks_df], ignore_index=True
             )
