@@ -77,6 +77,7 @@ def main():
             treated_stats_df["file_desc"] = desc
             treated_stats_df["TSS_lib_type"] = "treated"
             treated_stats_df["strand"] = strand
+
             treated_srnas_df["strand"] = strand_sign
             control_srnas_df, control_stats_df = _call_srnas(
                 working_pathes["TEX_neg"], working_pathes["term"], args
@@ -84,6 +85,7 @@ def main():
             control_stats_df["file_desc"] = desc
             control_stats_df["TSS_lib_type"] = "control"
             control_stats_df["strand"] = strand
+
             control_srnas_df["strand"] = strand_sign
             tmp_df1 = pd.concat([tmp_df1, treated_srnas_df], ignore_index=True)
             tmp_df2 = pd.concat([tmp_df2, control_srnas_df], ignore_index=True)
@@ -127,11 +129,11 @@ def main():
         for k, v in seqid_groups.items():
             if stats_df.at[i, "seqid"] in v:
                 stats_df.at[i, "Organism"] = k
-    stats_df = stats_df.groupby(["Organism", "file_desc", "TSS_lib_type"]).agg({"TSS_lib_windows_count": "sum",
-                                                                                "TSS_lib_peaks_count": "sum",
-                                                                                "TTS_lib_windows_count": "sum",
-                                                                                "TTS_lib_peaks_count": "sum",
-                                                                                "peaks_connections_count": "sum"})
+    stats_df = stats_df.groupby(["Organism", "file_desc", "TSS_lib_type"], as_index=False).agg({"TSS_lib_windows_count": "sum",
+                                                                                                "TSS_lib_peaks_count": "sum",
+                                                                                                "TTS_lib_windows_count": "sum",
+                                                                                                "TTS_lib_peaks_count": "sum",
+                                                                                                "peaks_connections_count": "sum"})
     stats_df.to_csv(os.path.abspath(f"{args.out_dir}/stats.tsv"), sep='\t', index=False)
     # ==> Excel
 
