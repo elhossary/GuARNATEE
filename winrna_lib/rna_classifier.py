@@ -12,6 +12,7 @@ from tqdm import tqdm
 from more_itertools import consecutive_groups
 from winrna_lib.helpers import Helpers
 from winrna_lib.fasta import Fasta
+from sklearn.preprocessing import MinMaxScaler
 
 
 class RNAClassifier:
@@ -38,7 +39,31 @@ class RNAClassifier:
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        self.rank_candidates()
         #print(self.classes.head(100).to_string())
+
+    def rank_candidates(self):
+        df = Helpers.expand_attributes_to_columns(self.classes)
+        rank_columns = ["ss_step_factor", "ts_step_factor", "ss_mean_plateau_height", "ts_mean_plateau_height", "mfe"]
+        ranked_columns = [f"{c}_rank" for c in rank_columns]
+        for rank_col in rank_columns:
+            df[rank_col] = pd.to_numeric(df[rank_col], errors='coerce', downcast='float').abs()
+        scaler = MinMaxScaler()
+        dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique()]
+        dfs_ranked_list = []
+        for tmp_df in dfs_list:
+            tmp_df.reset_index(inplace=True, drop=True)
+            scaled_df = pd.DataFrame(scaler.fit_transform(tmp_df[rank_columns]), columns=ranked_columns)
+            scaled_df["step_factors_rank"] = \
+                scaled_df[["ss_step_factor_rank", "ts_step_factor_rank"]].sum(axis=1)
+            scaled_df["mfe_step_factors_rank"] = \
+                scaled_df[["ss_step_factor_rank", "ts_step_factor_rank", "mfe_rank"]].sum(axis=1)
+            tmp_df = pd.merge(left=tmp_df, right=scaled_df, left_index=True, right_index=True).fillna("")
+            dfs_ranked_list.append(tmp_df)
+        df = pd.concat(dfs_ranked_list, ignore_index=True)
+        df.reset_index(inplace=True, drop=True)
+
+        self.classes = Helpers.warp_non_gff_columns(df)
 
     def _drop_redundancies(self):
         df = Helpers.expand_attributes_to_columns(self.classes)

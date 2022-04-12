@@ -46,7 +46,10 @@ class Helpers:
         #    pd.Series(list(map(Helpers.attributes_dict_to_str, attr_dict_list)))
         #print(gff_df[gff_df["start"] == 883439].to_string())
         if not no_join and "extra_attributes" in gff_df.columns:
-            gff_df['attributes'] = gff_df['attributes'] + ";" + gff_df['extra_attributes']
+            if "attributes" in gff_df.columns:
+                gff_df['attributes'] = gff_df['attributes'] + ";" + gff_df['extra_attributes']
+            else:
+                gff_df['attributes'] = gff_df['extra_attributes']
             non_gff_columns.append("extra_attributes")
         if not keep_columns:
             gff_df.drop(non_gff_columns, inplace=True, axis=1)
