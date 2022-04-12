@@ -48,6 +48,9 @@ class RNAClassifier:
         ranked_columns = [f"{c}_rank" for c in rank_columns]
         for rank_col in rank_columns:
             df[rank_col] = pd.to_numeric(df[rank_col], errors='coerce', downcast='float').abs()
+            df[f"{rank_col}_no_log"] = df[rank_col]
+            df[rank_col] = np.log10(df[rank_col].astype(float).replace([0, 0.0], np.nan))
+            #df[rank_col] = np.log10(df[rank_col])
         scaler = MinMaxScaler()
         dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique()]
         dfs_ranked_list = []
@@ -62,7 +65,9 @@ class RNAClassifier:
             dfs_ranked_list.append(tmp_df)
         df = pd.concat(dfs_ranked_list, ignore_index=True)
         df.reset_index(inplace=True, drop=True)
-
+        for rank_col in rank_columns:
+            df[rank_col] = df[f"{rank_col}_no_log"]
+            df.drop(columns=[f"{rank_col}_no_log"])
         self.classes = Helpers.warp_non_gff_columns(df)
 
     def _drop_redundancies(self):
