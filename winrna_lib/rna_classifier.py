@@ -45,12 +45,16 @@ class RNAClassifier:
     def rank_candidates(self):
         df = Helpers.expand_attributes_to_columns(self.classes)
         rank_columns = ["ss_step_factor", "ts_step_factor", "ss_mean_plateau_height", "ts_mean_plateau_height", "mfe"]
+        """
+        rank_columns = {"step_factors": ["ss_step_factor", "ts_step_factor"],
+                        "plateau_heights": ["ss_mean_plateau_height", "ts_mean_plateau_height"],
+                        "mfe": ["mfe"]}
+        """
         ranked_columns = [f"{c}_rank" for c in rank_columns]
         for rank_col in rank_columns:
             df[rank_col] = pd.to_numeric(df[rank_col], errors='coerce', downcast='float').abs()
             df[f"{rank_col}_no_log"] = df[rank_col]
             df[rank_col] = np.log10(df[rank_col].astype(float).replace([0, 0.0], np.nan))
-            #df[rank_col] = np.log10(df[rank_col])
         scaler = MinMaxScaler()
         dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique()]
         dfs_ranked_list = []
@@ -59,16 +63,25 @@ class RNAClassifier:
             scaled_df = pd.DataFrame(scaler.fit_transform(tmp_df[rank_columns]), columns=ranked_columns)
             scaled_df["step_factors_rank"] = \
                 scaled_df[["ss_step_factor_rank", "ts_step_factor_rank"]].sum(axis=1)
-            scaled_df["mfe_step_factors_rank"] = \
-                scaled_df[["ss_step_factor_rank", "ts_step_factor_rank", "mfe_rank"]].sum(axis=1)
+            scaled_df["plateau_heights_rank"] = \
+                scaled_df[["ss_mean_plateau_height_rank", "ts_mean_plateau_height_rank"]].sum(axis=1)
+            # sums of sums
+            scaled_df["sum_step_factors_mfe_rank"] = \
+                scaled_df[["step_factors_rank", "mfe_rank"]].sum(axis=1)
+            scaled_df["sum_plateau_heights_mfe_rank"] = \
+                scaled_df[["plateau_heights_rank", "mfe_rank"]].sum(axis=1)
+            scaled_df["sum_all_rank"] = \
+                scaled_df[["step_factors_rank", "plateau_heights_rank", "mfe_rank"]].sum(axis=1)
             tmp_df = pd.merge(left=tmp_df, right=scaled_df, left_index=True, right_index=True).fillna("")
             dfs_ranked_list.append(tmp_df)
         df = pd.concat(dfs_ranked_list, ignore_index=True)
         df.reset_index(inplace=True, drop=True)
         for rank_col in rank_columns:
             df[rank_col] = df[f"{rank_col}_no_log"]
-            df.drop(columns=[f"{rank_col}_no_log"])
+            df.drop(columns=[f"{rank_col}_no_log"], inplace=True)
+        df.drop(columns=["ss_step_factor_rank", "ts_step_factor_rank", "ss_mean_plateau_height_rank", "ts_mean_plateau_height_rank"], inplace=True)
         self.classes = Helpers.warp_non_gff_columns(df)
+
 
     def _drop_redundancies(self):
         df = Helpers.expand_attributes_to_columns(self.classes)
@@ -417,13 +430,15 @@ class RNAClassifier:
         gff_df.fillna("_", inplace=True)
         gff_df["GC_content"] = gff_df["RNA_sequence"].map(lambda x: round(SeqUtils.GC(x), 2))
 
-        slice_prefix = f"{slice_size}_nt_"
-        gff_df[f"{slice_prefix}RNA_sequence"] = gff_df["RNA_sequence"].str[-slice_size:]
-        gff_df[f"10nt_RNA_sequence"] = gff_df["RNA_sequence"].str[-10:]
+        #slice_prefix = f"{slice_size}_nt_"
+        #gff_df[f"{slice_prefix}RNA_sequence"] = gff_df["RNA_sequence"].str[-slice_size:]
+        #gff_df[f"10nt_RNA_sequence"] = gff_df["RNA_sequence"].str[-10:]
         gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, "RNA_sequence", self.get_rna_structure_scores)
-        gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"{slice_prefix}RNA_sequence", self.get_rna_structure_scores, slice_prefix)
-        gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"10nt_RNA_sequence", self._get_poly_u_score)
-        gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence", "10nt_RNA_sequence"], inplace=True)
+        #gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"{slice_prefix}RNA_sequence", self.get_rna_structure_scores, slice_prefix)
+        #gff_df = Helpers.explode_dict_yielding_func_into_columns(gff_df, f"10nt_RNA_sequence", self._get_poly_u_score)
+        #gff_df.drop(columns=["RNA_sequence", f"{slice_prefix}RNA_sequence", "10nt_RNA_sequence"], inplace=True)
+        gff_df.drop(columns=["RNA_sequence"], inplace=True)
+        #gff_df.drop(columns=["RNA_sequence", "10nt_RNA_sequence"], inplace=True)
         self.classes = Helpers.warp_non_gff_columns(gff_df)
 
     def _get_poly_u_score(self, seq_str):
