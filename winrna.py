@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--read_length", default=75, type=int, help="")
     parser.add_argument("--min_raw_height", default=10, type=float, help="")
     parser.add_argument("--min_step_factor", default=1.5, type=float, help="")
+    parser.add_argument("--min_orf_ud_frag_ratio", default=0.0, type=float)
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
 
@@ -99,8 +100,8 @@ def main():
         )
         tmp_df1["condition"] = desc
         tmp_df2["condition"] = desc
-        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas).classes)
-        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas).classes)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, args.min_orf_ud_frag_ratio).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, args.min_orf_ud_frag_ratio).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
             {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
         ).score_similarity()

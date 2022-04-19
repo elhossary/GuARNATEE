@@ -112,7 +112,7 @@ class WindowPeaks:
         thres = threshold_func(train_set, factor)
         if train_set[train_set >= thres].size > sig_len / win_len:
             factor += 0.1
-            return WindowPeaks.get_threshold_by_recursive_IQR(train_set, factor, sig_len, win_len)
+            return WindowPeaks.get_threshold_by_recursive_iqr(train_set, factor, sig_len, win_len)
         else:
             return thres
 

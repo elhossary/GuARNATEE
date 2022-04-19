@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 class RNAClassifier:
-    def __init__(self, gff_obj, anno_tbl_df: pd.DataFrame, fasta: Fasta):
+    def __init__(self, gff_obj, anno_tbl_df: pd.DataFrame, fasta: Fasta, min_orf_ud_frag_ratio: float):
         if anno_tbl_df.empty or gff_obj.gff_df.empty:
             print("Error: No candidates to classify")
             sys.exit(1)
@@ -24,6 +24,7 @@ class RNAClassifier:
         self.gff_df = gff_obj.gff_df[~gff_obj.gff_df["type"].isin(prohibited_types)].copy()
         self.anno_tbl_df = anno_tbl_df
         self.fasta = fasta
+        self.min_orf_ud_frag_ratio = min_orf_ud_frag_ratio
         self.gff_columns = gff_obj.column_names
         self.seqids = set.intersection(set(self.gff_df["seqid"].unique().tolist()),
                                        set(self.fasta.fwd_seqs.keys()),
@@ -36,11 +37,25 @@ class RNAClassifier:
         #self.prefilter_candidates()
         self.classify()
         self.get_intergenic_flanks()
+        self._filter_orf_int_fragments()
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
+        self.classes.reset_index(drop=True, inplace=True)
         self.rank_candidates()
-        #print(self.classes.head(100).to_string())
+        print(self.classes.head(100).to_string())
+
+    def _filter_orf_int_fragments(self):
+        bound_columns = ["upstream_fragment_ratio", "downstream_fragment_ratio"]
+        df = Helpers.expand_attributes_to_columns(self.classes)
+        orf_int_df = df[df["annotation_class"] == "ORF_int"].copy()
+        df.drop(orf_int_df.index, inplace=True)
+        for col in bound_columns:
+            orf_int_df[col] = pd.to_numeric(orf_int_df[col], errors='coerce', downcast='float')
+            orf_int_df = orf_int_df[orf_int_df[col] >= self.min_orf_ud_frag_ratio].copy()
+        df = pd.concat([df, orf_int_df])
+        df.sort_values(["seqid", "start", "end"], inplace=True)
+        self.classes = Helpers.warp_non_gff_columns(df)
 
     def rank_candidates(self):
         df = Helpers.expand_attributes_to_columns(self.classes)
@@ -267,6 +282,10 @@ class RNAClassifier:
         multi_intersect_df = Helpers.warp_non_gff_columns(multi_intersect_df)
         self.classes = pd.concat([self.classes, multi_intersect_df], ignore_index=True)
         del multi_intersect_df
+
+
+    def classify_sub_types(self):
+        pass
 
     def add_overlap_info(self, row: pd.Series, intersection_only=False) -> pd.Series:
         if row["overlap_size"] == 0:
