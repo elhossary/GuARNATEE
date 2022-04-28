@@ -40,10 +40,13 @@ def main():
 
     # load files
     conf_dict = {}
+    conf_file_path = os.path.abspath(args.config_file)
     conf_parse = configparser.ConfigParser(strict=True)
-    conf_parse.read(os.path.abspath(args.config_file))
+    print(f"Loading config file: {conf_file_path}")
+    conf_parse.read(conf_file_path)
     for sect in conf_parse.sections():
         conf_dict.update(dict(conf_parse.items(sect)), )
+
     gff_obj = GFF(gff_paths=args.gffs)
     fastas = Fasta(fasta_paths=args.fastas)
     seqid_groups = fastas.organism_seqid_groups
