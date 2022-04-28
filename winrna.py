@@ -33,7 +33,7 @@ def main():
         help="Wiggle files (space separated)",
     )
     parser.add_argument(
-        "--config_file", default="config.cfg", type=str, help="Configuration file"
+        "--config_file", default=f"{os.path.dirname(__file__)}/config.cfg", type=str, help="Configuration file"
     )
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
