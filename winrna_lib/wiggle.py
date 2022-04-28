@@ -97,16 +97,8 @@ class Wiggle:
         ret_dict = {}
         header_text = in_str.split("\n", maxsplit=1)[0]
         in_str = in_str.replace(f"{header_text}\n", "")
-        all_headers = re.findall(
-            r"^.*chrom=.*$", in_str, flags=re.MULTILINE | re.IGNORECASE
-        )
-        splitters = ""
-        for header in all_headers:
-            splitters += header + "|"
-        splitters = f"({splitters[:-1]})"
-        split_str_list = re.split(
-            rf"{splitters}", in_str, flags=re.MULTILINE | re.IGNORECASE
-        )
+        all_patterns = re.findall(r"^.*chrom=.*$", in_str, flags=re.MULTILINE | re.IGNORECASE)
+        split_str_list = re.split(rf"({'|'.join(all_patterns)})", in_str, flags=re.MULTILINE | re.IGNORECASE)
         content_list = [i for i in split_str_list if i != ""]
         empty_seqids = []
         for i in range(0, len(content_list), 2):

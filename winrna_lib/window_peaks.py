@@ -13,7 +13,7 @@ class WindowPeaks:
     def __init__(
         self,
         raw_signal: np.array,
-        min_peak_distance: int,
+        min_peak_distance,
         min_height,
         min_step_factor,
         is_reversed,
@@ -21,9 +21,9 @@ class WindowPeaks:
     ):
         self.raw_signal = raw_signal
         self.windows = self.get_slicing_indexes(self.raw_signal)
-        self.min_peak_distance = min_peak_distance
-        self.min_height = min_height
-        self.min_step_factor = min_step_factor
+        self.min_peak_distance = int(min_peak_distance)
+        self.min_height = float(min_height)
+        self.min_step_factor = float(min_step_factor)
         self.is_reversed = is_reversed
         self.prefix = prefix
         self.peaks_arr = self.call_signal_peaks()

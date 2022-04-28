@@ -11,7 +11,7 @@ import pandas as pd
 import os
 from winrna_lib.fasta import Fasta
 import pybedtools as pybed
-
+import configparser
 
 def main():
     parser = argparse.ArgumentParser()
@@ -33,19 +33,17 @@ def main():
         help="Wiggle files (space separated)",
     )
     parser.add_argument(
-        "--min_len", default=50, type=int, help="Minimum allowed annotation length"
+        "--config_file", default="config.cfg", type=str, help="Configuration file"
     )
-    parser.add_argument(
-        "--max_len", default=350, type=int, help="Maximum allowed annotation length"
-    )
-    parser.add_argument("--read_length", default=75, type=int, help="")
-    parser.add_argument("--min_raw_height", default=10, type=float, help="")
-    parser.add_argument("--min_step_factor", default=1.5, type=float, help="")
-    parser.add_argument("--min_orf_ud_frag_ratio", default=0.0, type=float)
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
 
     # load files
+    conf_dict = {}
+    conf_parse = configparser.ConfigParser(strict=True)
+    conf_parse.read(os.path.abspath(args.config_file))
+    for sect in conf_parse.sections():
+        conf_dict.update(dict(conf_parse.items(sect)), )
     gff_obj = GFF(gff_paths=args.gffs)
     fastas = Fasta(fasta_paths=args.fastas)
     seqid_groups = fastas.organism_seqid_groups
@@ -73,7 +71,7 @@ def main():
                 zip(working_wigs["treatment"], working_wigs["file_path"])
             )
             treated_srnas_df, treated_stats_df = _call_srnas(
-                working_pathes["TEX_pos"], working_pathes["term"], args
+                working_pathes["TEX_pos"], working_pathes["term"], conf_dict
             )
             treated_stats_df["file_desc"] = desc
             treated_stats_df["TSS_lib_type"] = "treated"
@@ -81,7 +79,7 @@ def main():
 
             treated_srnas_df["strand"] = strand_sign
             control_srnas_df, control_stats_df = _call_srnas(
-                working_pathes["TEX_neg"], working_pathes["term"], args
+                working_pathes["TEX_neg"], working_pathes["term"], conf_dict
             )
             control_stats_df["file_desc"] = desc
             control_stats_df["TSS_lib_type"] = "control"
@@ -100,8 +98,8 @@ def main():
         )
         tmp_df1["condition"] = desc
         tmp_df2["condition"] = desc
-        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, args.min_orf_ud_frag_ratio).classes)
-        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, args.min_orf_ud_frag_ratio).classes)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, float(conf_dict["min_orf_ud_frag_ratio"])).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, float(conf_dict["min_orf_ud_frag_ratio"])).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
             {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
         ).score_similarity()
@@ -125,7 +123,7 @@ def main():
             index=False,
             sep="\t",
             header=False)
-
+    # Stats
     for i in stats_df.index:
         for k, v in seqid_groups.items():
             if stats_df.at[i, "seqid"] in v:
@@ -137,8 +135,10 @@ def main():
                                                                                                 "peaks_connections_count": "sum"})
     stats_df.to_csv(os.path.abspath(f"{args.out_dir}/stats.tsv"), sep='\t', index=False)
     # ==> Excel
+    drop_cols = ["source", "type", "score", "phase", "id", "ss_id", "ss_diff_height", "ss_height", "ss_upstream", "ss_downstream", "ts_id", "ts_diff_height", "ts_height", "ts_upstream", "ts_downstream"]
 
     export_df = Helpers.expand_attributes_to_columns(export_df)
+    export_df.drop(columns=drop_cols, inplace=True)
     rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
 
     classes_groups = {"intergenic": [], "ORF_int": [], "others": []}
@@ -174,15 +174,9 @@ def main():
     sys.exit(0)
 
 
-def _call_srnas(five_end_path, three_end_path, args):
+def _call_srnas(five_end_path, three_end_path, conf_dict):
     srnas = WindowSRNA(Wiggle(five_end_path), Wiggle(three_end_path))
-    srnas.call_window_srna(
-        args.min_len,
-        args.max_len,
-        args.read_length,
-        args.min_raw_height,
-        args.min_step_factor
-    )
+    srnas.call_window_srna(conf_dict)
     return srnas.srna_candidates, srnas.log_df
 
 

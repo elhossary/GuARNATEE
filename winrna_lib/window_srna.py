@@ -51,37 +51,23 @@ class WindowSRNA:
                      "peaks_connections_count"])
 
     def call_window_srna(
-        self,
-        min_len: int,
-        max_len: int,
-        min_distance: int,
-        min_height: float,
-        min_step_factor: float,
-    ) -> None:
-        """
-        :param min_len: minimum length allowed for a small RNA candidate
-        :param max_len: maximum length allowed for a small RNA candidate
-        :param min_distance: minimum distance allowed between called peaks
-        :param min_height: minimum raw height filter
-        :param min_step_factor: minimum step factor filter
-        :return: return nothing, directly saves to class variable
-        """
+        self, conf_dict: dict) -> None:
         for seqid in self.seqids:
             print(f"=> Calling 5' ends for SeqID: {seqid}")
             five_end_peaks_obj = WindowPeaks(
                 self.five_end_wiggle[seqid],
-                min_distance,
-                min_height,
-                min_step_factor,
+                conf_dict["min_distance"],
+                conf_dict["min_height"],
+                conf_dict["min_step_factor"],
                 bool(self.strand == "-"),
                 "SS",
             )
             print(f"=> Calling 3' ends for SeqID: {seqid}")
             three_end_peaks_obj = WindowPeaks(
                 self.three_end_wiggle[seqid],
-                min_distance,
-                min_height,
-                min_step_factor,
+                conf_dict["min_distance"],
+                conf_dict["min_height"],
+                conf_dict["min_step_factor"],
                 bool(self.strand == "+"),
                 "TS",
             )
@@ -98,11 +84,11 @@ class WindowSRNA:
             ).sort()
             connected_peaks_df = (
                 self.connect_sites(
-                    five_end_peaks_bed, three_end_peaks_bed, min_len, max_len
+                    five_end_peaks_bed, three_end_peaks_bed, int(conf_dict["min_len"]), int(conf_dict["max_len"])
                 )
                 if self.strand == "+"
                 else self.connect_sites(
-                    three_end_peaks_bed, five_end_peaks_bed, min_len, max_len
+                    three_end_peaks_bed, five_end_peaks_bed, int(conf_dict["min_len"]), int(conf_dict["max_len"])
                 )
             )
             tmp_dict = {"seqid": seqid,

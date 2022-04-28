@@ -37,16 +37,16 @@ class RNAClassifier:
         #self.prefilter_candidates()
         self.classify()
         self.get_intergenic_flanks()
-        self._filter_orf_int_fragments()
+        self._filter_orf_int_segments()
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
         self.classes.reset_index(drop=True, inplace=True)
         self.rank_candidates()
-        print(self.classes.head(100).to_string())
+        #print(self.classes.head(100).to_string())
 
-    def _filter_orf_int_fragments(self):
-        bound_columns = ["upstream_fragment_ratio", "downstream_fragment_ratio"]
+    def _filter_orf_int_segments(self):
+        bound_columns = ["upstream_segment_ratio", "downstream_segment_ratio"]
         df = Helpers.expand_attributes_to_columns(self.classes)
         orf_int_df = df[df["annotation_class"] == "ORF_int"].copy()
         df.drop(orf_int_df.index, inplace=True)
@@ -208,11 +208,11 @@ class RNAClassifier:
                                             + antisense_single_df["ref_type"] \
                                             + "_region;detection_status=novel;" \
                                             + antisense_single_df["ref_attributes"]
-        antisense_single_df["overlap_fragment_ratio"] = \
+        antisense_single_df["overlap_segment_ratio"] = \
             antisense_single_df["overlap_size"] / \
             (antisense_single_df["ref_end"] - antisense_single_df["ref_start"] + 1)\
             * 100
-        antisense_single_df["overlap_fragment_ratio"] = antisense_single_df["overlap_fragment_ratio"].round(2)
+        antisense_single_df["overlap_segment_ratio"] = antisense_single_df["overlap_segment_ratio"].round(2)
         antisense_single_df.drop(columns=ref_cols + ["overlap_size"], inplace=True)
         antisense_single_df = Helpers.rewrap_attributes_column(antisense_single_df)
         antisense_single_df = Helpers.warp_non_gff_columns(antisense_single_df)
@@ -220,8 +220,8 @@ class RNAClassifier:
         del antisense_single_df
         ##########################################
         single_intersect_df = single_intersect_df.apply(self.add_overlap_info, args=[False], axis=1, result_type='expand')
-        sorf_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] > 75)
-        orf_int_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_fragment_ratio"] <= 75)
+        sorf_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_segment_ratio"] > 75)
+        orf_int_mask = (single_intersect_df["ref_type"] == "CDS") & (single_intersect_df["overlap_segment_ratio"] <= 75)
         single_intersect_df.loc[sorf_mask, "attributes"] += ";annotation_class=sORF;detection_status=known"
         single_intersect_df.loc[orf_int_mask, "attributes"] += ";annotation_class=ORF_int;detection_status=novel"
         single_intersect_df.loc[sorf_mask, "attributes"] = \
@@ -268,14 +268,14 @@ class RNAClassifier:
                 end = multi_intersect_df.at[i, "end"]
                 overlap_info = self._get_overlap_position((start, end), (ref_start, ref_end))
                 rename_ref = "" if ref_type == "CDS" else f"{ref_type}_"
-                multi_intersect_df.at[i, f"{rename_ref}overlap_fragment_ratio"] = overlap_info["intersect_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}overlap_segment_ratio"] = overlap_info["intersect_size_perc"]
                 if ref_type != "CDS":
                     continue
                 if multi_intersect_df.at[i, "strand"] == "-":
                     overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                         overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
-                multi_intersect_df.at[i, f"{rename_ref}upstream_fragment_ratio"] = overlap_info["diff_before_size_perc"]
-                multi_intersect_df.at[i, f"{rename_ref}downstream_fragment_ratio"] = overlap_info["diff_after_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}upstream_segment_ratio"] = overlap_info["diff_before_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}downstream_segment_ratio"] = overlap_info["diff_after_size_perc"]
         multi_intersect_df.drop(columns=ref_cols + ["overlap_size"], inplace=True)
         multi_intersect_df.fillna("", inplace=True)
         multi_intersect_df = Helpers.rewrap_attributes_column(multi_intersect_df)
@@ -291,14 +291,14 @@ class RNAClassifier:
         if row["overlap_size"] == 0:
             return row
         overlap_info = self._get_overlap_position((row["start"], row["end"]), (row["ref_start"], row["ref_end"]))
-        row["overlap_fragment_ratio"] = overlap_info["intersect_size_perc"]
+        row["overlap_segment_ratio"] = overlap_info["intersect_size_perc"]
         if intersection_only:
             return row
         if row["strand"] == "-":
             overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                 overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
-        row["upstream_fragment_ratio"] = overlap_info["diff_before_size_perc"]
-        row["downstream_fragment_ratio"] = overlap_info["diff_after_size_perc"]
+        row["upstream_segment_ratio"] = overlap_info["diff_before_size_perc"]
+        row["downstream_segment_ratio"] = overlap_info["diff_after_size_perc"]
         #row["gene_info"] = Helpers.get_naming_attributes(row["ref_attributes"], prefix=f"{row['ref_type']}_")
         return row
 
