@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 class RNAClassifier:
-    def __init__(self, gff_obj, anno_tbl_df: pd.DataFrame, fasta: Fasta, min_orf_ud_frag_ratio: float):
+    def __init__(self, gff_obj, anno_tbl_df: pd.DataFrame, fasta: Fasta, conf_dict: dict):
         if anno_tbl_df.empty or gff_obj.gff_df.empty:
             print("Error: No candidates to classify")
             sys.exit(1)
@@ -24,7 +24,8 @@ class RNAClassifier:
         self.gff_df = gff_obj.gff_df[~gff_obj.gff_df["type"].isin(prohibited_types)].copy()
         self.anno_tbl_df = anno_tbl_df
         self.fasta = fasta
-        self.min_orf_ud_frag_ratio = min_orf_ud_frag_ratio
+        self.conf_dict = conf_dict
+        self.min_orf_ud_frag_ratio = conf_dict["min_orf_ud_frag_ratio"]
         self.gff_columns = gff_obj.column_names
         self.seqids = set.intersection(set(self.gff_df["seqid"].unique().tolist()),
                                        set(self.fasta.fwd_seqs.keys()),
@@ -37,7 +38,7 @@ class RNAClassifier:
         #self.prefilter_candidates()
         self.classify()
         self.get_intergenic_flanks()
-        self._filter_orf_int_segments()
+        #self._filter_orf_int_segments()
         self.get_gff_sequences_features(is_rna=True)
         self._drop_redundancies()
         self.classes.sort_values(["seqid", "start", "end"], inplace=True)
@@ -274,51 +275,100 @@ class RNAClassifier:
                 if multi_intersect_df.at[i, "strand"] == "-":
                     overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                         overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
+                    overlap_info["diff_before_size"], overlap_info["diff_after_size"] = \
+                        overlap_info["diff_after_size"], overlap_info["diff_before_size"]
                 multi_intersect_df.at[i, f"{rename_ref}upstream_segment_ratio"] = overlap_info["diff_before_size_perc"]
                 multi_intersect_df.at[i, f"{rename_ref}downstream_segment_ratio"] = overlap_info["diff_after_size_perc"]
+                multi_intersect_df.at[i, f"{rename_ref}upstream_segment_size"] = overlap_info["diff_before_size"]
+                multi_intersect_df.at[i, f"{rename_ref}downstream_segment_size"] = overlap_info["diff_after_size"]
         multi_intersect_df.drop(columns=ref_cols + ["overlap_size"], inplace=True)
         multi_intersect_df.fillna("", inplace=True)
+
         multi_intersect_df = Helpers.rewrap_attributes_column(multi_intersect_df)
         multi_intersect_df = Helpers.warp_non_gff_columns(multi_intersect_df)
         self.classes = pd.concat([self.classes, multi_intersect_df], ignore_index=True)
         del multi_intersect_df
-
+        self.classify_sub_types()
 
     def classify_sub_types(self):
-        pass
+        df = self.classes[self.classes["attributes"].str.contains("annotation_class=ORF_int;")].copy()
+        self.classes.drop(df.index, inplace=True)
+        df = Helpers.expand_attributes_to_columns(df)
+        self.conf_dict["max_outbound_tss_tolerance"] = int(self.conf_dict["max_outbound_tss_tolerance"])
+        self.conf_dict["max_outbound_tts_tolerance"] = int(self.conf_dict["max_outbound_tts_tolerance"])
+        self.conf_dict["max_tss_len"] = int(self.conf_dict["max_tss_len"])
+        self.conf_dict["max_tts_len"] = int(self.conf_dict["max_tts_len"])
+        df["upstream_segment_size"] = pd.to_numeric(df["upstream_segment_size"], errors='coerce', downcast='integer')
+        df["downstream_segment_size"] = pd.to_numeric(df["downstream_segment_size"], errors='coerce',downcast='integer')
+        tss_range = range(self.conf_dict["max_outbound_tss_tolerance"] * -1, self.conf_dict["max_tss_len"] + 1, 1)
+        tts_range = range(self.conf_dict["max_outbound_tts_tolerance"] * -1, self.conf_dict["max_tts_len"] + 1, 1)
+        for i in df.index:
+            if df.at[i, "upstream_segment_size"] > self.conf_dict["max_tss_len"] and \
+                    df.at[i, "downstream_segment_size"] > self.conf_dict["max_tts_len"]:
+                df.at[i, "sub_class"] = "mainstream"
+                continue
+            if df.at[i, "upstream_segment_size"] < self.conf_dict["max_outbound_tss_tolerance"] * -1 and \
+                    df.at[i, "downstream_segment_size"] < self.conf_dict["max_outbound_tts_tolerance"] * -1:
+                # should be unrealistic case!
+                df.at[i, "sub_class"] = "5'/3' out ORF"
+                continue
+            if df.at[i, "upstream_segment_size"] < self.conf_dict["max_outbound_tss_tolerance"] * -1:
+                df.at[i, "sub_class"] = "5' out ORF"
+                continue
+            if df.at[i, "downstream_segment_size"] < self.conf_dict["max_outbound_tts_tolerance"] * -1:
+                df.at[i, "sub_class"] = "3' out ORF"
+                continue
+            if df.at[i, "downstream_segment_size"] in tts_range:
+                df.at[i, "sub_class"] = "3' CDS derived"
+                continue
+            if df.at[i, "upstream_segment_size"] in tss_range:
+                df.at[i, "sub_class"] = "5' CDS derived"
+                continue
+        df = Helpers.warp_non_gff_columns(df)
+        self.classes = pd.concat([self.classes, df], ignore_index=True)
 
     def add_overlap_info(self, row: pd.Series, intersection_only=False) -> pd.Series:
         if row["overlap_size"] == 0:
             return row
         overlap_info = self._get_overlap_position((row["start"], row["end"]), (row["ref_start"], row["ref_end"]))
         row["overlap_segment_ratio"] = overlap_info["intersect_size_perc"]
+        row["overlap_segment_size"] = overlap_info["intersect_size"]
         if intersection_only:
             return row
         if row["strand"] == "-":
             overlap_info["diff_before_size_perc"], overlap_info["diff_after_size_perc"] = \
                 overlap_info["diff_after_size_perc"], overlap_info["diff_before_size_perc"]
+            overlap_info["diff_before_size"], overlap_info["diff_after_size"] = \
+                overlap_info["diff_after_size"], overlap_info["diff_before_size"]
         row["upstream_segment_ratio"] = overlap_info["diff_before_size_perc"]
         row["downstream_segment_ratio"] = overlap_info["diff_after_size_perc"]
+        row["upstream_segment_size"] = overlap_info["diff_before_size"]
+        row["downstream_segment_size"] = overlap_info["diff_after_size"]
         #row["gene_info"] = Helpers.get_naming_attributes(row["ref_attributes"], prefix=f"{row['ref_type']}_")
         return row
 
     @staticmethod
     def _get_overlap_position(A: tuple, B: tuple) -> dict:
-        ret_dict = {"intersect_size_perc": 0.0, "diff_before_size_perc": 0.0, "diff_after_size_perc": 0.0}
+        ret_dict = {"intersect_size_perc": 0.0, "diff_before_size_perc": 0.0, "diff_after_size_perc": 0.0,
+                    "intersect_size": 0, "diff_before_size": 0, "diff_after_size": 0}
         A_range = set(range(int(A[0]), int(A[1]) + 1, 1))
         B_range = set(range(int(B[0]), int(B[1]) + 1, 1))
         intersect = A_range.intersection(B_range)
         if not intersect:
             return ret_dict
         intersect_len = len(intersect)
-        ret_dict[f"intersect_size_perc"] = round(intersect_len / len(B_range) * 100)
+        ret_dict[f"intersect_size"] = intersect_len
+        ret_dict[f"intersect_size_perc"] = round(ret_dict[f"intersect_size"] / len(B_range) * 100)
+
         sym_diff_cg = [set(cg) for cg in consecutive_groups(sorted(A_range.symmetric_difference(B_range)))]
+
         if len(sym_diff_cg) == 0:
             return ret_dict
         if len(sym_diff_cg) > 2:
             print("Fatal Error!")
             sys.exit()
         for cg_id, cg in enumerate(sym_diff_cg):
+            pos = ""
             if max(cg) < min(intersect):
                 pos = "before"
             elif min(cg) > max(intersect):
@@ -326,8 +376,11 @@ class RNAClassifier:
             else:
                 print("Fatal Error!")
                 sys.exit()
-            ret_dict[f"diff_{pos}_size_perc"] = round(len(sym_diff_cg[cg_id]) / len(B_range) * 100, 2)
+
+            ret_dict[f"diff_{pos}_size"] = len(sym_diff_cg[cg_id])
+            ret_dict[f"diff_{pos}_size_perc"] = round(ret_dict[f"diff_{pos}_size"] / len(B_range) * 100, 2)
             if cg.issubset(A_range):
+                ret_dict[f"diff_{pos}_size"] *= -1
                 ret_dict[f"diff_{pos}_size_perc"] *= -1
         return ret_dict
 

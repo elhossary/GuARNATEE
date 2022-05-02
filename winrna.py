@@ -101,8 +101,8 @@ def main():
         )
         tmp_df1["condition"] = desc
         tmp_df2["condition"] = desc
-        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, float(conf_dict["min_orf_ud_frag_ratio"])).classes)
-        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, float(conf_dict["min_orf_ud_frag_ratio"])).classes)
+        tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, conf_dict).classes)
+        tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, conf_dict).classes)
         tmp_df1, tmp_df2 = DifferentialClassifier(
             {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
         ).score_similarity()
@@ -137,8 +137,11 @@ def main():
                                                                                                 "TTS_lib_peaks_count": "sum",
                                                                                                 "peaks_connections_count": "sum"})
     stats_df.to_csv(os.path.abspath(f"{args.out_dir}/stats.tsv"), sep='\t', index=False)
+
     # ==> Excel
-    drop_cols = ["source", "type", "score", "phase", "id", "ss_id", "ss_diff_height", "ss_height", "ss_upstream", "ss_downstream", "ts_id", "ts_diff_height", "ts_height", "ts_upstream", "ts_downstream"]
+    drop_cols = ["source", "type", "score", "phase", "id",
+                 "ss_id", "ss_diff_height", "ss_height", "ss_upstream", "ss_downstream",
+                 "ts_id", "ts_diff_height", "ts_height", "ts_upstream", "ts_downstream"]
 
     export_df = Helpers.expand_attributes_to_columns(export_df)
     export_df.drop(columns=drop_cols, inplace=True)
@@ -154,6 +157,22 @@ def main():
             classes_groups["ORF_int"] += [cls]
         else:
             classes_groups["others"] += [cls]
+
+    ### ORF int Stats
+    orf_int_stats_df = export_df[export_df["sub_class"] != ""].copy()
+    orf_int_stats_df["Specie"] = ""
+    for seqid_group, seqids in seqid_groups.items():
+        orf_int_stats_df.loc[orf_int_stats_df["seqid"].isin(seqids), "Specie"] = seqid_group
+    orf_int_stats_df = orf_int_stats_df.value_counts(subset=["Specie", "lib_type", "replicate", "sub_class"]).reset_index()
+    orf_int_stats_df.columns = ["Specie", "lib_type", "replicate", "sub_class", 'count']
+    print(orf_int_stats_df.to_string())
+    with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/ORF_int_stats.xlsx"), engine="openpyxl") as writer:
+        for sp in orf_int_stats_df["Specie"].unique():
+            tmp_stat_df = orf_int_stats_df[orf_int_stats_df["Specie"] == sp].copy()
+            #tmp_stat_df.drop(columns=[sp], inplace=True)
+            tmp_stat_df.to_excel(excel_writer=writer, sheet_name=sp, index=False, header=True, na_rep="", verbose=True)
+
+    ### Tables
     for seqid_group, seqids in seqid_groups.items():
         with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/{seqid_group}_candidates.xlsx"), engine="openpyxl") \
                 as writer:
