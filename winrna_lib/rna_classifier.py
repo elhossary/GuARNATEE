@@ -72,7 +72,12 @@ class RNAClassifier:
             df[f"{rank_col}_no_log"] = df[rank_col]
             df[rank_col] = np.log10(df[rank_col].astype(float).replace([0, 0.0], np.nan))
         scaler = MinMaxScaler()
-        dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique()]
+        if "sub_class" in df.columns:
+            dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique() if cls != "ORF_int"]
+            dfs_list.extend([df[df["sub_class"] == cls].copy() for cls in df["sub_class"].unique() if cls != ""])
+        else:
+            dfs_list = [df[df["annotation_class"] == cls].copy() for cls in df["annotation_class"].unique()]
+
         dfs_ranked_list = []
         for tmp_df in dfs_list:
             tmp_df.reset_index(inplace=True, drop=True)
