@@ -165,7 +165,6 @@ def main():
         orf_int_stats_df.loc[orf_int_stats_df["seqid"].isin(seqids), "Specie"] = seqid_group
     orf_int_stats_df = orf_int_stats_df.value_counts(subset=["Specie", "lib_type", "replicate", "sub_class"]).reset_index()
     orf_int_stats_df.columns = ["Specie", "lib_type", "replicate", "sub_class", 'count']
-    print(orf_int_stats_df.to_string())
     with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/ORF_int_stats.xlsx"), engine="openpyxl") as writer:
         for sp in orf_int_stats_df["Specie"].unique():
             tmp_stat_df = orf_int_stats_df[orf_int_stats_df["Specie"] == sp].copy()
