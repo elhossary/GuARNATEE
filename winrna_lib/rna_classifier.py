@@ -323,10 +323,10 @@ class RNAClassifier:
                 df.at[i, "sub_class"] = "with internal sORF"
                 continue
             if df.at[i, "upstream_segment_size"] < self.conf_dict["max_outbound_tss_tolerance"] * -1:
-                df.at[i, "sub_class"] = "UTR/CDS 3' end overlap"
+                df.at[i, "sub_class"] = "UTR/CDS 5' end overlap"
                 continue
             if df.at[i, "downstream_segment_size"] < self.conf_dict["max_outbound_tts_tolerance"] * -1:
-                df.at[i, "sub_class"] = "UTR/CDS 5' end overlap"
+                df.at[i, "sub_class"] = "UTR/CDS 3' end overlap"
                 continue
 
             if df.at[i, "downstream_segment_size"] in tts_range and \
