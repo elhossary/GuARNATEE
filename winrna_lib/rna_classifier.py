@@ -258,14 +258,18 @@ class RNAClassifier:
                 multi_intersect_df.at[i, ref_col] = [y for x, y in enumerate(lst) if x not in drop_ids]
             if all(x == "CDS" for x in multi_intersect_df.at[i, "ref_type"]):
                 multi_intersect_df.at[i, "ref_attributes"] = ";".join(multi_intersect_df.at[i, "ref_attributes"])
-                multi_intersect_df.at[i, "attributes"] += f";annotation_class=cross_CDS;detection_status=novel;{multi_intersect_df.at[i, 'ref_attributes']}"
-            elif any(x == "CDS" for x in multi_intersect_df.at[i, "ref_type"]) and any(x == "ncRNA" or "ORF_int" in x for x in multi_intersect_df.at[i, "ref_type"]):
+                multi_intersect_df.at[i, "attributes"] += \
+                    f";annotation_class=cross_CDS;detection_status=novel;{multi_intersect_df.at[i, 'ref_attributes']}"
+            elif any(x == "CDS" for x in multi_intersect_df.at[i, "ref_type"]) and \
+                    any(x == "ncRNA" or "ORF_int" in x for x in multi_intersect_df.at[i, "ref_type"]):
                 multi_intersect_df.at[i, "ref_attributes"] = ";".join(multi_intersect_df.at[i, "ref_attributes"])
-                multi_intersect_df.at[i, "attributes"] += f";annotation_class=ORF_int;detection_status=known;{multi_intersect_df.at[i, 'ref_attributes']}"
+                multi_intersect_df.at[i, "attributes"] += \
+                    f";annotation_class=ORF_int;detection_status=known;{multi_intersect_df.at[i, 'ref_attributes']}"
             else:
                 multi_intersect_df.at[i, "ref_attributes"] = ";".join(multi_intersect_df.at[i, "ref_attributes"])
                 types = "_and_".join(multi_intersect_df.at[i, "ref_type"])
-                multi_intersect_df.at[i, "attributes"] += f";annotation_class=cross_{types};detection_status=known;{multi_intersect_df.at[i, 'ref_attributes']}"
+                multi_intersect_df.at[i, "attributes"] += \
+                    f";annotation_class=cross_{types};detection_status=known;{multi_intersect_df.at[i, 'ref_attributes']}"
             for v_id, v in enumerate(multi_intersect_df.at[i, "overlap_size"]):
                 ref_start = multi_intersect_df.at[i, "ref_start"][v_id]
                 ref_end = multi_intersect_df.at[i, "ref_end"][v_id]
@@ -304,30 +308,37 @@ class RNAClassifier:
         self.conf_dict["max_tss_len"] = int(self.conf_dict["max_tss_len"])
         self.conf_dict["max_tts_len"] = int(self.conf_dict["max_tts_len"])
         df["upstream_segment_size"] = pd.to_numeric(df["upstream_segment_size"], errors='coerce', downcast='integer')
-        df["downstream_segment_size"] = pd.to_numeric(df["downstream_segment_size"], errors='coerce',downcast='integer')
+        df["downstream_segment_size"] = pd.to_numeric(df["downstream_segment_size"], errors='coerce', downcast='integer')
         tss_range = range(self.conf_dict["max_outbound_tss_tolerance"] * -1, self.conf_dict["max_tss_len"] + 1, 1)
         tts_range = range(self.conf_dict["max_outbound_tts_tolerance"] * -1, self.conf_dict["max_tts_len"] + 1, 1)
         for i in df.index:
             if df.at[i, "upstream_segment_size"] > self.conf_dict["max_tss_len"] and \
                     df.at[i, "downstream_segment_size"] > self.conf_dict["max_tts_len"]:
-                df.at[i, "sub_class"] = "mainstream"
+                df.at[i, "sub_class"] = "Central"
                 continue
+
             if df.at[i, "upstream_segment_size"] < self.conf_dict["max_outbound_tss_tolerance"] * -1 and \
                     df.at[i, "downstream_segment_size"] < self.conf_dict["max_outbound_tts_tolerance"] * -1:
-                # should be unrealistic case!
-                df.at[i, "sub_class"] = "5'/3' out ORF"
+                # rarely a ncRNA that encodes a sub smaller sORF
+                df.at[i, "sub_class"] = "with internal sORF"
                 continue
             if df.at[i, "upstream_segment_size"] < self.conf_dict["max_outbound_tss_tolerance"] * -1:
-                df.at[i, "sub_class"] = "5' out ORF"
+                df.at[i, "sub_class"] = "UTR/CDS 3' end overlap"
                 continue
             if df.at[i, "downstream_segment_size"] < self.conf_dict["max_outbound_tts_tolerance"] * -1:
-                df.at[i, "sub_class"] = "3' out ORF"
+                df.at[i, "sub_class"] = "UTR/CDS 5' end overlap"
+                continue
+
+            if df.at[i, "downstream_segment_size"] in tts_range and \
+                    df.at[i, "upstream_segment_size"] in tss_range:
+                # should be unrealistic case!, pre-classified as sORF
+                df.at[i, "sub_class"] = "CDS 5'/3' end overlap"
                 continue
             if df.at[i, "downstream_segment_size"] in tts_range:
-                df.at[i, "sub_class"] = "3' CDS derived"
+                df.at[i, "sub_class"] = "CDS 3' end only overlap"
                 continue
             if df.at[i, "upstream_segment_size"] in tss_range:
-                df.at[i, "sub_class"] = "5' CDS derived"
+                df.at[i, "sub_class"] = "CDS 5' end only overlap"
                 continue
         df = Helpers.warp_non_gff_columns(df)
         self.classes = pd.concat([self.classes, df], ignore_index=True)
