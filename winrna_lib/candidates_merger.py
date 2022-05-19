@@ -9,7 +9,6 @@ class CandidatesMerger:
     def __init__(self, in_df: pd.DataFrame, similarity=0.95):
         self.column_names = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
         self.in_df = self.cluster_similar_annotations(in_df, similarity)
-        self.in_df = pd.read_table("/home/muhoss/analysis_2022/test.gff", names=self.column_names + ["group_id"])
         self.in_df = self.merge_by_group_by(self.in_df)
 
     def merge(self):
