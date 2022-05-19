@@ -3,6 +3,7 @@ import numpy as np
 from winrna_lib.window_srna import WindowSRNA
 from winrna_lib.rna_classifier import RNAClassifier
 from winrna_lib.differential_classifier import DifferentialClassifier
+from winrna_lib.candidates_merger import CandidatesMerger
 from winrna_lib.helpers import Helpers
 from winrna_lib.wiggle import Wiggle
 from winrna_lib.gff import GFF
@@ -46,7 +47,6 @@ def main():
     conf_parse.read(conf_file_path)
     for sect in conf_parse.sections():
         conf_dict.update(dict(conf_parse.items(sect)), )
-
     gff_obj = GFF(gff_paths=args.gffs)
     fastas = Fasta(fasta_paths=args.fastas)
     seqid_groups = fastas.organism_seqid_groups
@@ -103,20 +103,20 @@ def main():
         tmp_df2["condition"] = desc
         tmp_df1 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df1, fastas, conf_dict).classes)
         tmp_df2 = Helpers.warp_non_gff_columns(RNAClassifier(gff_obj, tmp_df2, fastas, conf_dict).classes)
-        tmp_df1, tmp_df2 = DifferentialClassifier(
-            {"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}
-        ).score_similarity()
-        tmp_df1["replicate"] = desc
-        tmp_df2["replicate"] = desc
+        tmp_df1, tmp_df2 = DifferentialClassifier({"TEX_pos": tmp_df1, "TEX_neg": tmp_df2}).score_similarity()
         export_df = pd.concat([export_df, tmp_df1, tmp_df2], ignore_index=True)
     export_df = Helpers.warp_non_gff_columns(export_df)
     export_pb = pybed.BedTool.from_dataframe(export_df).sort().cluster(s=True, d=0)
     export_df = export_pb.to_dataframe(names=gff_obj.column_names + ["cluster_id"])
     clusters = export_df["cluster_id"].unique().size
     export_df = Helpers.warp_non_gff_columns(export_df)
+    generate_orf_stats(Helpers.expand_attributes_to_columns(export_df), seqid_groups, args)
+    if conf_dict["detailed_output"] == "False":
+        export_df = CandidatesMerger(export_df, float(conf_dict["merge_similarity_ratio"])).merge()
     export_df.sort_values(["seqid", "start", "end"], inplace=True)
     export_df.reset_index(inplace=True, drop=True)
     export_df["source"] = "WinRNA"
+
     print(f"Total {export_df.shape[0]} candidates in {clusters} unique regions to be exported")
     # Exports
     # ==> GFFs
@@ -144,7 +144,9 @@ def main():
                  "ts_id", "ts_diff_height", "ts_height", "ts_upstream", "ts_downstream"]
 
     export_df = Helpers.expand_attributes_to_columns(export_df)
-    export_df.drop(columns=drop_cols, inplace=True)
+    for col in drop_cols:
+        if col in export_df.columns:
+            export_df.drop(columns=[col], inplace=True)
     rename_cols = {c: c.replace("_", " ") for c in export_df.columns}
 
     classes_groups = {"intergenic": [], "ORF_int": [], "others": []}
@@ -157,19 +159,6 @@ def main():
             classes_groups["ORF_int"] += [cls]
         else:
             classes_groups["others"] += [cls]
-
-    ### ORF int Stats
-    orf_int_stats_df = export_df[export_df["sub_class"] != ""].copy()
-    orf_int_stats_df["Specie"] = ""
-    for seqid_group, seqids in seqid_groups.items():
-        orf_int_stats_df.loc[orf_int_stats_df["seqid"].isin(seqids), "Specie"] = seqid_group
-    orf_int_stats_df = orf_int_stats_df.value_counts(subset=["Specie", "lib_type", "replicate", "sub_class"]).reset_index()
-    orf_int_stats_df.columns = ["Specie", "lib_type", "replicate", "sub_class", 'count']
-    with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/ORF_int_stats.xlsx"), engine="openpyxl") as writer:
-        for sp in orf_int_stats_df["Specie"].unique():
-            tmp_stat_df = orf_int_stats_df[orf_int_stats_df["Specie"] == sp].copy()
-            #tmp_stat_df.drop(columns=[sp], inplace=True)
-            tmp_stat_df.to_excel(excel_writer=writer, sheet_name=sp, index=False, header=True, na_rep="", verbose=True)
 
     ### Tables
     for seqid_group, seqids in seqid_groups.items():
@@ -199,6 +188,22 @@ def _call_srnas(five_end_path, three_end_path, conf_dict):
     srnas = WindowSRNA(Wiggle(five_end_path), Wiggle(three_end_path))
     srnas.call_window_srna(conf_dict)
     return srnas.srna_candidates, srnas.log_df
+
+
+def generate_orf_stats(export_df, seqid_groups, args):
+    ### ORF int Stats
+    orf_int_stats_df = export_df[export_df["sub_class"] != ""].copy()
+    orf_int_stats_df["Specie"] = ""
+    for seqid_group, seqids in seqid_groups.items():
+        orf_int_stats_df.loc[orf_int_stats_df["seqid"].isin(seqids), "Specie"] = seqid_group
+    orf_int_stats_df = orf_int_stats_df.value_counts(
+        subset=["Specie", "lib_type", "condition", "sub_class"]).reset_index()
+    orf_int_stats_df.columns = ["Specie", "lib_type", "condition", "sub_class", 'count']
+    with pd.ExcelWriter(os.path.abspath(f"{args.out_dir}/ORF_int_stats.xlsx"), engine="openpyxl") as writer:
+        for sp in orf_int_stats_df["Specie"].unique():
+            tmp_stat_df = orf_int_stats_df[orf_int_stats_df["Specie"] == sp].copy()
+            # tmp_stat_df.drop(columns=[sp], inplace=True)
+            tmp_stat_df.to_excel(excel_writer=writer, sheet_name=sp, index=False, header=True, na_rep="", verbose=True)
 
 
 if __name__ == "__main__":
