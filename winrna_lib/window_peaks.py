@@ -1,3 +1,5 @@
+import functools
+import multiprocessing
 import os.path
 import numpy as np
 import pandas as pd
@@ -105,17 +107,24 @@ class WindowPeaks:
             for group in slice_indexes
             if len(group) >= min_len
         ]
+
+    @staticmethod
+    def calc_custom_iqr(prc, data):
+        return stats.iqr(data, rng=(100 - prc, prc)) * 1.5 + np.percentile(data, prc)
+    
     @staticmethod
     def variable_iqr_threshold(sig_deriv):
-        iqr_threshold_func = lambda data, prc: stats.iqr(data, rng=(100 - prc, prc)) * 1.5 + np.percentile(data, prc)
         points = np.abs(sig_deriv[sig_deriv != 0])
         if points.size == 0:
             return None
-        perc_list = [iqr_threshold_func(points, i) for i in range(75, 101, 1)]
+        perc_list = multiprocessing.Pool(processes=multiprocessing.cpu_count())\
+            .map(functools.partial(WindowPeaks.calc_custom_iqr, data=points), list(range(75, 101, 1)))
+        # iqr_threshold_func = lambda prc, data: stats.iqr(data, rng=(100 - prc, prc)) * 1.5 + np.percentile(data, prc)
+        #perc_list = [iqr_threshold_func(points, i) for i in range(75, 101, 1)]
         largest_diff = np.argmax(np.diff(perc_list))
         points_iqr_thres = perc_list[largest_diff - 1]
         return points_iqr_thres
-
+    """
     @staticmethod
     def get_threshold_by_recursive_iqr(train_set, factor, sig_len, win_len=75):
         threshold_func = lambda data, factor: (np.percentile(data, 75) + stats.iqr(data) * 1.5) * factor
@@ -135,7 +144,7 @@ class WindowPeaks:
         significant_values = sorted_train_set[filt_mask]
         if significant_values.shape[0] > 0:
             return np.min(significant_values)
-
+    """
     @staticmethod
     def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=10):
         """
@@ -156,12 +165,6 @@ class WindowPeaks:
             signal_slice, height=(threshold, None), distance=min_peak_distance)
         if peaks.size == 0:
             return None
-
-        # Filter by recalling peaks with threshold
-        #peaks, peaks_props = signal.find_peaks(
-        #    signal_slice, height=(threshold, None), distance=min_peak_distance
-        #)
-
         return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):
