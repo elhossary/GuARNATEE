@@ -105,6 +105,16 @@ class WindowPeaks:
             for group in slice_indexes
             if len(group) >= min_len
         ]
+    @staticmethod
+    def variable_iqr_threshold(sig_deriv):
+        iqr_threshold_func = lambda data, prc: stats.iqr(data, rng=(100 - prc, prc)) * 1.5 + np.percentile(data, prc)
+        points = np.abs(sig_deriv[sig_deriv != 0])
+        if points.size == 0:
+            return None
+        perc_list = [iqr_threshold_func(points, i) for i in range(75, 101, 1)]
+        largest_diff = np.argmax(np.diff(perc_list))
+        points_iqr_thres = perc_list[largest_diff - 1]
+        return points_iqr_thres
 
     @staticmethod
     def get_threshold_by_recursive_iqr(train_set, factor, sig_len, win_len=75):
@@ -128,6 +138,7 @@ class WindowPeaks:
 
     @staticmethod
     def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=10):
+        """
         # Core calling method
         threshold_func = lambda data: (np.percentile(data, 75) + stats.iqr(data)) * 1.5
         # Call peaks
@@ -137,6 +148,8 @@ class WindowPeaks:
         # threshold = WindowPeaks.get_threshold_by_recursive_iqr(threshold_train_set, 1, signal_slice.size)
         # threshold = threshold_func(threshold_train_set)
         threshold = WindowPeaks.get_threshold_by_zscore(threshold_train_set, 3)
+        """
+        threshold = WindowPeaks.variable_iqr_threshold(signal_slice)
         if threshold in [0, None]:
             return None
         peaks, peaks_props = signal.find_peaks(
