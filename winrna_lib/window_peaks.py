@@ -113,16 +113,11 @@ class WindowPeaks:
         points = np.abs(sig_deriv[sig_deriv != 0])
         if points.size == 0:
             return None
-        try:
-            perc_list = [WindowPeaks._calc_custom_iqr(points, i) for i in range(75, 101, 1)]
-        except:
-            print(sig_deriv)
-            print(points)
-            return None
+        perc_list = [WindowPeaks._calc_custom_iqr(points, i) for i in range(75, 101, 1)]
         return perc_list[np.argmax(np.diff(perc_list)) - 1]
 
     @staticmethod
-    def _calc_custom_iqr(prc, data):
+    def _calc_custom_iqr(data, prc):
         return stats.iqr(data, rng=(100 - prc, prc)) * 1.5 + np.percentile(data, prc)
 
     """
