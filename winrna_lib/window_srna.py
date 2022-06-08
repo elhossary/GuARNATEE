@@ -53,8 +53,11 @@ class WindowSRNA:
     def call_window_srna(
         self, conf_dict: dict, thres_factor) -> None:
         for seqid in self.seqids:
+            """
+            # for testing purpose only
             if seqid != "NC_002516.2":
                 continue
+            """
             print(f"=> Calling 5' ends for SeqID: {seqid}")
             five_end_peaks_obj = WindowPeaks(
                 self.five_end_wiggle[seqid],
