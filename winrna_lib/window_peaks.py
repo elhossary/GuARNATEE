@@ -20,6 +20,7 @@ class WindowPeaks:
         min_step_factor,
         is_reversed,
         prefix="",
+        thres_factor=1
     ):
         self.raw_signal = raw_signal
         self.windows = self.get_slicing_indexes(self.raw_signal)
@@ -27,8 +28,10 @@ class WindowPeaks:
         self.min_height = float(min_height)
         self.min_step_factor = float(min_step_factor)
         self.is_reversed = is_reversed
+        self.thres_factor = thres_factor
         self.prefix = prefix
         self.peaks_arr = self.call_signal_peaks()
+
 
     def call_signal_peaks(self) -> np.array:
         sig_deriv = (
@@ -42,7 +45,7 @@ class WindowPeaks:
                            postfix="", bar_format='{desc} |{bar:20}| {percentage:3.0f}%'):
             window_sig_slice = sig_deriv[window[0]: window[1]]
             window_peaks = self._call_peaks_in_slice(
-                window_sig_slice, self.min_peak_distance
+                window_sig_slice, self.min_peak_distance, self.thres_factor
             )
 
             if window_peaks is None:
@@ -70,7 +73,7 @@ class WindowPeaks:
         # plateau_height calculated as the average coverage for 30nt of peak height ignored if it contains zeros
         plateau_width = 12  # the optimum value is the minimum mapping length
         plateau_cov = np.array([self.raw_signal[x - plateau_width -1 : x] if self.is_reversed
-                                else self.raw_signal[x : x + plateau_width]
+                                else self.raw_signal[x: x + plateau_width]
                                 for x in all_peaks[:, 0].astype(int)])
 
         mean_plateau_height = np.array([np.round(np.mean(pc), 2) for pc in plateau_cov])
@@ -78,7 +81,8 @@ class WindowPeaks:
         all_peaks = np.stack(
             (
                 all_peaks[:, 0],
-                np.round(all_peaks[:, 1], 2),
+                all_peaks[:, 1],
+                np.round(all_peaks[:, 2], 2),
                 np.array(np.round(raw_heights, 2)),
                 np.round(mean_step_before, 2),
                 np.round(mean_step_after, 2),
@@ -87,10 +91,10 @@ class WindowPeaks:
             ),
             axis=-1,
         )
-        plateau_cov_filter__mask = np.array([np.all(pc) for pc in plateau_cov]) # filter interrupted signals
+        plateau_cov_filter_mask = np.array([np.all(pc) for pc in plateau_cov])  # filter interrupted signals
         raw_heights_filter_mask = all_peaks[:, 2] >= self.min_height
         step_factor_filter_mask = all_peaks[:, 5] >= self.min_step_factor
-        all_peaks = all_peaks[plateau_cov_filter__mask & raw_heights_filter_mask & step_factor_filter_mask]  # apply filters
+        all_peaks = all_peaks[plateau_cov_filter_mask & raw_heights_filter_mask & step_factor_filter_mask]  # apply filters
         return all_peaks
 
     @staticmethod
@@ -114,7 +118,9 @@ class WindowPeaks:
         if points.size == 0:
             return None
         perc_list = [WindowPeaks._calc_custom_iqr(points, i) for i in range(75, 101, 1)]
-        return perc_list[np.argmax(np.diff(perc_list)) - 1]
+        threshold = perc_list[np.argmax(np.diff(perc_list)) - 1]
+        threshold_iqr_factor = threshold / perc_list[0]
+        return threshold, round(threshold_iqr_factor, 0)
 
     @staticmethod
     def _calc_custom_iqr(data, prc):
@@ -142,26 +148,24 @@ class WindowPeaks:
             return np.min(significant_values)
     """
     @staticmethod
-    def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=10):
-        """
+    def _call_peaks_in_slice(signal_slice: np.array, min_peak_distance=10, thres_factor=1):
         # Core calling method
-        threshold_func = lambda data: (np.percentile(data, 75) + stats.iqr(data)) * 1.5
+        threshold_func = lambda data, factor: (np.percentile(data, 75) + stats.iqr(data)) * 1.5
         # Call peaks
         threshold_train_set = np.abs(signal_slice[signal_slice != 0])
         if threshold_train_set.size == 0:
             return None
-        # threshold = WindowPeaks.get_threshold_by_recursive_iqr(threshold_train_set, 1, signal_slice.size)
-        # threshold = threshold_func(threshold_train_set)
-        threshold = WindowPeaks.get_threshold_by_zscore(threshold_train_set, 3)
-        """
-        threshold = WindowPeaks.variable_iqr_threshold(signal_slice)
+        threshold, threshold_iqr_factor = threshold_func(threshold_train_set, thres_factor), thres_factor
+        #threshold, threshold_iqr_factor = WindowPeaks.variable_iqr_threshold(signal_slice)
         if threshold in [0, None]:
             return None
+        threshold = threshold * thres_factor
         peaks, peaks_props = signal.find_peaks(
             signal_slice, height=(threshold, None), distance=min_peak_distance)
         if peaks.size == 0:
             return None
-        return np.stack((peaks, peaks_props["peak_heights"]), axis=-1)
+        threshold_iqr_factors = np.array([threshold_iqr_factor] * peaks.size)
+        return np.stack((peaks, threshold_iqr_factors, peaks_props["peak_heights"]), axis=-1)
 
     def get_peaks_df(self):
         # f"{self.prefix}_background_fold_change"
@@ -171,6 +175,7 @@ class WindowPeaks:
             data=self.peaks_arr,
             columns=[
                 "peak_index",
+                f"{self.prefix}_iqr_factor",
                 f"{self.prefix}_diff_height",
                 f"{self.prefix}_height",
                 f"{self.prefix}_upstream",

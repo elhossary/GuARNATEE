@@ -51,8 +51,10 @@ class WindowSRNA:
                      "peaks_connections_count"])
 
     def call_window_srna(
-        self, conf_dict: dict) -> None:
+        self, conf_dict: dict, thres_factor) -> None:
         for seqid in self.seqids:
+            if seqid != "NC_002516.2":
+                continue
             print(f"=> Calling 5' ends for SeqID: {seqid}")
             five_end_peaks_obj = WindowPeaks(
                 self.five_end_wiggle[seqid],
@@ -61,6 +63,7 @@ class WindowSRNA:
                 conf_dict["min_step_factor"],
                 bool(self.strand == "-"),
                 "SS",
+                thres_factor
             )
             print(f"=> Calling 3' ends for SeqID: {seqid}")
             three_end_peaks_obj = WindowPeaks(
@@ -70,6 +73,7 @@ class WindowSRNA:
                 conf_dict["min_step_factor"],
                 bool(self.strand == "+"),
                 "TS",
+                thres_factor
             )
 
             five_end_peaks_str = five_end_peaks_obj.get_bed_str(seqid)
@@ -96,7 +100,9 @@ class WindowSRNA:
                         "TSS_lib_peaks_count": five_end_peaks_obj.peaks_arr.size,
                         "TTS_lib_windows_count": len(three_end_peaks_obj.windows),
                         "TTS_lib_peaks_count": three_end_peaks_obj.peaks_arr.size,
-                        "peaks_connections_count": connected_peaks_df.shape[0]}
+                        "peaks_connections_count": connected_peaks_df.shape[0],
+                        "TSS_peaks_thresholds": five_end_peaks_obj.peaks_arr[:, 1].tolist(),
+                        "TTS_peaks_thresholds": three_end_peaks_obj.peaks_arr[:, 1].tolist()}
             self.log_df = pd.concat([self.log_df, pd.DataFrame([tmp_dict], columns=tmp_dict.keys())], ignore_index=True)
             self.srna_candidates = pd.concat(
                 [self.srna_candidates, connected_peaks_df], ignore_index=True

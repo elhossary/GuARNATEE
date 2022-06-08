@@ -13,6 +13,7 @@ import os
 from winrna_lib.fasta import Fasta
 import pybedtools as pybed
 import configparser
+import matplotlib.pyplot as plt
 
 def main():
     parser = argparse.ArgumentParser()
@@ -33,12 +34,12 @@ def main():
         nargs="+",
         help="Wiggle files (space separated)",
     )
+    parser.add_argument("--threshold", type=int, default=1)
     parser.add_argument(
         "--config_file", default=f"{os.path.dirname(__file__)}/config.cfg", type=str, help="Configuration file"
     )
     parser.add_argument("--out_dir", required=True, type=str, help="")
     args = parser.parse_args()
-
     # load files
     conf_dict = {}
     conf_file_path = os.path.abspath(args.config_file)
@@ -74,15 +75,16 @@ def main():
                 zip(working_wigs["treatment"], working_wigs["file_path"])
             )
             treated_srnas_df, treated_stats_df = _call_srnas(
-                working_pathes["TEX_pos"], working_pathes["term"], conf_dict
+                working_pathes["TEX_pos"], working_pathes["term"], conf_dict, args.threshold
             )
+
             treated_stats_df["file_desc"] = desc
             treated_stats_df["TSS_lib_type"] = "treated"
             treated_stats_df["strand"] = strand
 
             treated_srnas_df["strand"] = strand_sign
             control_srnas_df, control_stats_df = _call_srnas(
-                working_pathes["TEX_neg"], working_pathes["term"], conf_dict
+                working_pathes["TEX_neg"], working_pathes["term"], conf_dict, args.threshold
             )
             control_stats_df["file_desc"] = desc
             control_stats_df["TSS_lib_type"] = "control"
@@ -131,6 +133,17 @@ def main():
         for k, v in seqid_groups.items():
             if stats_df.at[i, "seqid"] in v:
                 stats_df.at[i, "Organism"] = k
+    """
+    all_thres = []
+    for i in stats_df.index:
+        all_thres.extend(stats_df.at[i, "TSS_peaks_thresholds"])
+        all_thres.extend(stats_df.at[i, "TTS_peaks_thresholds"])
+    fig = plt.figure(figsize=(16, 9))
+    plt.grid()
+    plt.plot(all_thres)
+    plt.title("Variable threshold factors of IQR")
+    fig.savefig(os.path.abspath(f"{args.out_dir}/dist_thres_iqr.jpg"))
+    """
     stats_df = stats_df.groupby(["Organism", "file_desc", "TSS_lib_type"], as_index=False).agg({"TSS_lib_windows_count": "sum",
                                                                                                 "TSS_lib_peaks_count": "sum",
                                                                                                 "TTS_lib_windows_count": "sum",
@@ -184,9 +197,9 @@ def main():
     sys.exit(0)
 
 
-def _call_srnas(five_end_path, three_end_path, conf_dict):
+def _call_srnas(five_end_path, three_end_path, conf_dict, threshold):
     srnas = WindowSRNA(Wiggle(five_end_path), Wiggle(three_end_path))
-    srnas.call_window_srna(conf_dict)
+    srnas.call_window_srna(conf_dict, thres_factor=threshold)
     return srnas.srna_candidates, srnas.log_df
 
 
