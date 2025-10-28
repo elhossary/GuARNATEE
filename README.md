@@ -1,2 +1,1 @@
-# WinRNA
-A tool for predicting bacterial small RNAs globally based on differential RNA-Seq and Term-Seq
+# GuARNATEE - **G**enome-wide **A**nomaly-based s**RNA** **T**ranscripts **E**xtremities **E**xtraction
