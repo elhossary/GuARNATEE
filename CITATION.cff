@@ -1,13 +1,13 @@
 cff-version: 1.2.0
 message: If you use this software, please cite it as below.
 authors:
-  - family-names: Muhammad
-    given-names: Elhossary
-    orcid: https://orcid.org/0000-0002-6738-6089
-  - family-names: Förstner
-    given-names: Konrad Ulrich
-    orcid: https://orcid.org/0000-0002-1481-2996
-title: A tool for predicting bacterial small RNAs globally based on differential RNA-Seq and Term-Seq
+  - family-names: "Elhossary"
+    given-names: "Muhammad"
+    orcid: "https://orcid.org/0000-0002-6738-6089"
+  - family-names: "Förstner"
+    given-names: "Konrad"
+    orcid: "https://orcid.org/0000-0002-1481-2996"
+title: "GuARNATEE - Genome-wide Anomaly-based sRNA Transcripts Extremities Extraction"
 version: 0.1.0
-doi: -
 date-released: 2025-10-31
+url: "https://github.com/elhossary/GuARNATEE"
