@@ -7,7 +7,7 @@ authors:
   - family-names: "Förstner"
     given-names: "Konrad"
     orcid: "https://orcid.org/0000-0002-1481-2996"
-title: "GuARNATEE - Genome-wide Anomaly-based sRNA Transcripts Extremities Extraction"
+title: "GuaRNAtee"
 version: 0.1.0
 date-released: 2025-10-31
-url: "https://github.com/elhossary/GuARNATEE"
+url: "https://github.com/elhossary/GuaRNAtee"

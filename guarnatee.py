@@ -96,10 +96,10 @@ def main():
             stats_df = pd.concat([stats_df, treated_stats_df, control_stats_df], ignore_index=True)
 
         tmp_df1 = Helpers.get_gff_df(
-            tmp_df1, anno_source="GuARNATEE", anno_type="candidate", new_id=True
+            tmp_df1, anno_source="GuaRNAtee", anno_type="candidate", new_id=True
         )
         tmp_df2 = Helpers.get_gff_df(
-            tmp_df2, anno_source="GuARNATEE", anno_type="candidate", new_id=True
+            tmp_df2, anno_source="GuaRNAtee", anno_type="candidate", new_id=True
         )
         tmp_df1["condition"] = desc
         tmp_df2["condition"] = desc
@@ -117,7 +117,7 @@ def main():
         export_df = CandidatesMerger(export_df, float(conf_dict["merge_similarity_ratio"])).merge()
     export_df.sort_values(["seqid", "start", "end"], inplace=True)
     export_df.reset_index(inplace=True, drop=True)
-    export_df["source"] = "GuARNATEE"
+    export_df["source"] = "GuaRNAtee"
 
     print(f"Total {export_df.shape[0]} candidates in {clusters} unique regions to be exported")
     # Exports
