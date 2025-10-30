@@ -8,7 +8,7 @@ This software is still a beta version
 ## Usage
 ### Prerequisites:
 - Python >= 3.6
-- Please refer to [requirement.txt](https://github.com/elhossary/GuARNATEE/blob/main/requirements.txt) for the dependencies' installation.
+- Please refer to [requirement.txt](https://github.com/foerstner-lab/GuARNATEE/blob/main/requirements.txt) for the dependencies' installation.
 ### How to run:
 - GuaRNAtee takes coverage files in wiggle format (.wig), reference genome in Fasta format, and reference annotations in GFF3 format.
 - The ```--wigs``` argumant takes this format: ```<path>:<strand>:<condition>:<replicate>:<protocol>```, the fields are:
@@ -45,7 +45,7 @@ python3 guarnatee.py \
 Currently, GuaRNAtee is being further developed to detect sRNAs based on the coverage of conventional unfragmented sRNA-Seq libraries, as well as further improving the outlier detection algorithm.
 
 ## License
-This software is licensed under [MIT license](https://github.com/elhossary/GuARNATEE/blob/main/LICENSE)
+This software is licensed under [MIT license](https://github.com/foerstner-lab/GuARNATEE/blob/main/LICENSE)
 
 ## Citation
-If you use this software, please refer to [CITATION.cff](https://github.com/elhossary/GuaRNAtee/blob/main/CITATION.cff)
+If you use this software, please refer to [CITATION.cff](https://github.com/foerstner-lab/GuaRNAtee/blob/main/CITATION.cff)
