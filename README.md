@@ -19,7 +19,7 @@ This software is still a beta version
   - **protocol** one of: ```TEX_pos```, ```TEX_neg```, or ```term```
 - Use it as follows:
 ```lua
-python3 winrna.py \
+python3 guarnatee.py \
   --wigs <wig:strand:cond:rep:protocol> [more ...] \
   --gffs <gff> [more ...] \
   --fastas <fasta> [more ...] \
@@ -28,7 +28,7 @@ python3 winrna.py \
 ```
 - Example:
 ```shell
-python3 winrna.py \
+python3 guarnatee.py \
   --wigs \
     LB_0.4_rep1_forward.wig:f:LB_0.4:1:TEX_neg \
     LB_0.4_rep1_reverse.wig:r:LB_0.4:1:TEX_neg \
